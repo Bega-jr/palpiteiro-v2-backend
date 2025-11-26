@@ -4,82 +4,77 @@ import requests
 import csv
 import os
 from datetime import datetime
+import random
 
 app = Flask(__name__)
 CORS(app)
 
 CSV_FILE = 'historico_lotofacil.csv'
-CAIXA_BASE = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil"
+CAIXA_API = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil"
 
-def puxar_concurso(concurso: int):
-    """Puxa um concurso específico da API da Caixa"""
-    url = f"{CAIXA_BASE}/{concurso}"
+def puxar_ultimo_concurso():
+    """Puxa o último concurso da API oficial da Caixa"""
     try:
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if 'listaDezenas' in data:
-                dezenas = sorted(data['listaDezenas'])
-                data_sorteio = data['dataApuracao']  # dd/mm/yyyy
-                data_formatada = datetime.strptime(data_sorteio, '%d/%m/%Y').strftime('%d/%m/%Y')
-                return [concurso, data_formatada] + dezenas
-    except:
-        pass
-    return None
-
-def atualizar_historico_completo():
-    """Atualiza do último no CSV até o mais recente da Caixa"""
-    try:
-        # Puxa o último da Caixa
-        ultimo_url = f"{CAIXA_BASE}/{0}"  # 0 = último
-        response = requests.get(ultimo_url, timeout=10)
+        response = requests.get(CAIXA_API, timeout=10)
         if response.status_code != 200:
-            return False
+            print("Erro na API Caixa:", response.status_code)
+            return None
         
-        ultimo_concurso = response.json()['numero']
-        print(f"Último concurso na Caixa: {ultimo_concurso}")
+        data = response.json()
+        concurso = data['numero']
+        dezenas = sorted([int(x) for x in data['listaDezenas']])
+        data_str = data['dataApuracao']  # dd/mm/yyyy
+        data_formatada = datetime.strptime(data_str, '%d/%m/%Y').strftime('%d/%m/%Y')
+        
+        return {
+            'concurso': concurso,
+            'data': data_formatada,
+            'numeros': dezenas
+        }
+    except Exception as e:
+        print("Erro ao puxar último concurso:", e)
+        return None
 
+def atualizar_historico():
+    """Atualiza o CSV com o último concurso da Caixa"""
+    try:
+        ultimo = puxar_ultimo_concurso()
+        if not ultimo:
+            return False
+
+        print(f"Último concurso da Caixa: {ultimo['concurso']}")
+
+        # Cria CSV se não existir
         if not os.path.exists(CSV_FILE):
-            # Cria CSV vazio
             with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['concurso', 'data'] + [f'n{i}' for i in range(1,16)])
             ultimo_no_csv = 0
         else:
-            # Lê último do CSV
+            # Lê o último concurso do CSV
             with open(CSV_FILE, 'r', encoding='utf-8') as f:
-                reader = csv.reader(f)
-                linhas = list(reader)
-                ultimo_no_csv = int(linhas[-1][0]) if linhas[1:] else 0
+                reader = list(csv.reader(f))
+                ultimo_no_csv = int(reader[-1][0]) if len(reader) > 1 else 0
 
         print(f"Último no CSV: {ultimo_no_csv}")
 
-        if ultimo_concurso <= ultimo_no_csv:
+        if ultimo['concurso'] <= ultimo_no_csv:
             print("Já está atualizado!")
-            return True
+            return False
 
-        # Preenche o gap
-        novos_registros = []
-        for concurso in range(ultimo_no_csv + 1, ultimo_concurso + 1):
-            registro = puxar_concurso(concurso)
-            if registro:
-                novos_registros.append(registro)
-                print(f"Adicionado concurso {concurso}")
-            else:
-                print(f"Falhou concurso {concurso}")
+        # Adiciona o novo concurso
+        registro = [ultimo['concurso'], ultimo['data']] + ultimo['numeros']
+        with open(CSV_FILE, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(registro)
 
-        if novos_registros:
-            with open(CSV_FILE, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerows(novos_registros)
-            print(f"Adicionados {len(novos_registros)} concursos novos!")
-            return True
+        print(f"Concurso {ultimo['concurso']} adicionado com sucesso!")
+        return True
 
     except Exception as e:
-        print(f"Erro no auto-update: {e}")
+        print("Erro no update:", e)
         return False
 
-# Suas funções de gerar_apostas e estatisticas (igual antes)
 def carregar_historico():
     if not os.path.exists(CSV_FILE):
         return []
@@ -116,7 +111,6 @@ def gerar_apostas():
     if len(historico) < 10:
         return {"erro": "Histórico insuficiente"}
 
-    # Fixos dos últimos 50
     ultimos_50 = historico[-50:]
     contagem = {}
     for row in ultimos_50:
@@ -147,25 +141,24 @@ def gerar_apostas():
         "apostas": apostas
     }
 
-# Rotas
 @app.route('/api/atualizar', methods=['GET'])
 def atualizar():
-    sucesso = atualizar_historico_completo()
-    return jsonify({"atualizado": sucesso, "fonte": "Caixa API"})
+    sucesso = atualizar_historico()
+    return jsonify({"atualizado": sucesso, "fonte": "API Oficial Caixa"})
 
 @app.route('/api/palpites', methods=['GET'])
 def palpites():
-    atualizar_historico_completo()
+    atualizar_historico()
     return jsonify(gerar_apostas())
 
 @app.route('/api/resultados', methods=['GET'])
 def resultados():
-    atualizar_historico_completo()
+    atualizar_historico()
     return jsonify(estatisticas())
 
 @app.route('/')
 def home():
-    return jsonify({"status": "Palpiteiro V2 Backend - Auto-Update Caixa", "online": True})
+    return jsonify({"status": "Palpiteiro V2 - Backend com API Caixa Oficial", "online": True})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000))
