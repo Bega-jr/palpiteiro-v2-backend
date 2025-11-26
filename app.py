@@ -103,7 +103,7 @@ def carregar_historico():
                         'data': data,
                         'numeros': numeros
                     })
-                except ValueError:
+                except (ValueError, IndexError):
                     continue  # Pula linhas mal formatadas
     
     return sorted(historico, key=lambda x: x['concurso'])
