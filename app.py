@@ -51,10 +51,14 @@ def atualizar_historico():
                 writer.writerow(['concurso', 'data'] + [f'n{i}' for i in range(1,16)])
             ultimo_no_csv = 0
         else:
-            # Lê o último concurso do CSV
+            # Lê o último concurso do CSV (robustamente, sem DictReader)
             with open(CSV_FILE, 'r', encoding='utf-8') as f:
-                reader = list(csv.reader(f))
-                ultimo_no_csv = int(reader[-1][0]) if len(reader) > 1 else 0
+                reader = csv.reader(f)
+                linhas = list(reader)
+                if len(linhas) > 1 and linhas[-1]:  # Verifica se tem dados
+                    ultimo_no_csv = int(linhas[-1][0])
+                else:
+                    ultimo_no_csv = 0
 
         print(f"Último no CSV: {ultimo_no_csv}")
 
@@ -76,22 +80,40 @@ def atualizar_historico():
         return False
 
 def carregar_historico():
+    """Carrega histórico de forma robusta (sem DictReader se não tiver cabeçalho)"""
     if not os.path.exists(CSV_FILE):
         return []
+    
+    historico = []
     with open(CSV_FILE, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        return list(reader)
+        reader = csv.reader(f)
+        linhas = list(reader)
+        
+        # Pula a primeira linha se for cabeçalho (verifica se não é número)
+        start = 1 if linhas and not linhas[0][0].isdigit() else 0
+        
+        for linha in linhas[start:]:
+            if len(linha) >= 17:  # concurso + data + 15 números
+                try:
+                    concurso = int(linha[0])
+                    data = linha[1]
+                    numeros = [int(linha[i]) for i in range(2, 17)]
+                    historico.append({
+                        'concurso': concurso,
+                        'data': data,
+                        'numeros': numeros
+                    })
+                except ValueError:
+                    continue  # Pula linhas mal formatadas
+    
+    return sorted(historico, key=lambda x: x['concurso'])
 
 def estatisticas():
     historico = carregar_historico()
     if not historico:
         return {"erro": "Histórico vazio"}
 
-    todos_numeros = []
-    for row in historico:
-        nums = [int(row[f'n{i}']) for i in range(1,16)]
-        todos_numeros.extend(nums)
-
+    todos_numeros = [n for jogo in historico for n in jogo['numeros']]
     contagem = {n: todos_numeros.count(n) for n in range(1, 26)}
     quentes = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:10]
     frios = sorted(contagem.items(), key=lambda x: x[1])[:10]
@@ -100,7 +122,7 @@ def estatisticas():
     return {
         "ultimo_concurso": ultimo['concurso'],
         "data_ultimo": ultimo['data'],
-        "ultimos_numeros": [int(ultimo[f'n{i}']) for i in range(1,16)],
+        "ultimos_numeros": ultimo['numeros'],
         "quentes": [n for n, c in quentes],
         "frios": [n for n, c in frios],
         "total_sorteios": len(historico)
@@ -113,9 +135,8 @@ def gerar_apostas():
 
     ultimos_50 = historico[-50:]
     contagem = {}
-    for row in ultimos_50:
-        for i in range(1,16):
-            n = int(row[f'n{i}'])
+    for jogo in ultimos_50:
+        for n in jogo['numeros']:
             contagem[n] = contagem.get(n, 0) + 1
     fixos = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:4]
     fixos_nums = [n for n, c in fixos]
@@ -158,7 +179,7 @@ def resultados():
 
 @app.route('/')
 def home():
-    return jsonify({"status": "Palpiteiro V2 - Backend com API Caixa Oficial", "online": True})
+    return jsonify({"status": "Palpiteiro V2 Backend - Robusto e Anti-Erro", "online": True})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000))
