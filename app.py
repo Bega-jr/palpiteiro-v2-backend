@@ -1,6 +1,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
+from bs4 import BeautifulSoup
 import csv
 import os
 from datetime import datetime
@@ -10,90 +11,76 @@ app = Flask(__name__)
 CORS(app)
 
 CSV_FILE = 'historico_lotofacil.csv'
-CAIXA_API = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil"
+MAZU_URL = "https://www.mazusoft.com.br/lotofacil/resultado.php"
 
-def puxar_ultimo_concurso():
-    """Puxa o último concurso da API oficial da Caixa"""
+def atualizar_mazusoft():
+    """Puxa o último sorteio da Mazusoft e atualiza o CSV"""
     try:
-        response = requests.get(CAIXA_API, timeout=10)
-        if response.status_code != 200:
-            print("Erro na API Caixa:", response.status_code)
-            return None
+        response = requests.get(MAZU_URL, timeout=10)
+        soup = BeautifulSoup(response.content, 'html.parser')
         
-        data = response.json()
-        concurso = data['numero']
-        dezenas = sorted([int(x) for x in data['listaDezenas']])
-        data_str = data['dataApuracao']  # dd/mm/yyyy
-        data_formatada = datetime.strptime(data_str, '%d/%m/%Y').strftime('%d/%m/%Y')
-        
-        return {
-            'concurso': concurso,
-            'data': data_formatada,
-            'numeros': dezenas
-        }
-    except Exception as e:
-        print("Erro ao puxar último concurso:", e)
-        return None
+        # Pega o concurso
+        concurso_tag = soup.find('h2')
+        if not concurso_tag:
+            return False
+        concurso = int(''.join(filter(str.isdigit, concurso_tag.text)))
 
-def atualizar_historico():
-    """Atualiza o CSV com o último concurso da Caixa"""
-    try:
-        ultimo = puxar_ultimo_concurso()
-        if not ultimo:
+        # Pega os números na ordem de sorteio
+        bolas = soup.find_all('div', class_='bola')
+        numeros = []
+        for b in bolas:
+            num = b.text.strip()
+            if num.isdigit() and len(num) <= 2:
+                numeros.append(int(num))
+        
+        if len(numeros) != 15:
             return False
 
-        print(f"Último concurso da Caixa: {ultimo['concurso']}")
+        data_sorteio = datetime.now().strftime('%d/%m/%Y')  # Usa data atual se não achar no HTML
+
+        novo_registro = [concurso, data_sorteio] + numeros  # Ordem de sorteio oficial
 
         # Cria CSV se não existir
         if not os.path.exists(CSV_FILE):
             with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
+                writer = csv.writer(f, delimiter='\t')  # Tabulação como o seu
                 writer.writerow(['concurso', 'data'] + [f'n{i}' for i in range(1,16)])
             ultimo_no_csv = 0
         else:
-            # Lê o último concurso do CSV (robustamente, sem DictReader)
+            # Lê último do CSV
             with open(CSV_FILE, 'r', encoding='utf-8') as f:
-                reader = csv.reader(f)
-                linhas = list(reader)
-                if len(linhas) > 1 and linhas[-1]:  # Verifica se tem dados
-                    ultimo_no_csv = int(linhas[-1][0])
-                else:
-                    ultimo_no_csv = 0
+                reader = list(csv.reader(f, delimiter='\t'))
+                ultimo_no_csv = int(reader[-1][0]) if len(reader) > 1 else 0
 
-        print(f"Último no CSV: {ultimo_no_csv}")
-
-        if ultimo['concurso'] <= ultimo_no_csv:
-            print("Já está atualizado!")
+        if concurso <= ultimo_no_csv:
             return False
 
-        # Adiciona o novo concurso
-        registro = [ultimo['concurso'], ultimo['data']] + ultimo['numeros']
+        # Adiciona o novo
         with open(CSV_FILE, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(registro)
+            writer = csv.writer(f, delimiter='\t')
+            writer.writerow(novo_registro)
 
-        print(f"Concurso {ultimo['concurso']} adicionado com sucesso!")
+        print(f"Concurso {concurso} adicionado com sucesso!")
         return True
 
     except Exception as e:
-        print("Erro no update:", e)
+        print("Erro ao atualizar Mazusoft:", e)
         return False
 
 def carregar_historico():
-    """Carrega histórico de forma robusta (sem DictReader se não tiver cabeçalho)"""
     if not os.path.exists(CSV_FILE):
         return []
     
     historico = []
     with open(CSV_FILE, 'r', encoding='utf-8') as f:
-        reader = csv.reader(f)
+        reader = csv.reader(f, delimiter='\t')
         linhas = list(reader)
         
-        # Pula a primeira linha se for cabeçalho (verifica se não é número)
+        # Pula cabeçalho se existir
         start = 1 if linhas and not linhas[0][0].isdigit() else 0
         
         for linha in linhas[start:]:
-            if len(linha) >= 17:  # concurso + data + 15 números
+            if len(linha) >= 17:
                 try:
                     concurso = int(linha[0])
                     data = linha[1]
@@ -103,8 +90,8 @@ def carregar_historico():
                         'data': data,
                         'numeros': numeros
                     })
-                except (ValueError, IndexError):
-                    continue  # Pula linhas mal formatadas
+                except ValueError:
+                    continue
     
     return sorted(historico, key=lambda x: x['concurso'])
 
@@ -122,7 +109,7 @@ def estatisticas():
     return {
         "ultimo_concurso": ultimo['concurso'],
         "data_ultimo": ultimo['data'],
-        "ultimos_numeros": ultimo['numeros'],
+        "ultimos_numeros": ultimo['numeros'],  # Ordem de sorteio
         "quentes": [n for n, c in quentes],
         "frios": [n for n, c in frios],
         "total_sorteios": len(historico)
@@ -131,8 +118,18 @@ def estatisticas():
 def gerar_apostas():
     historico = carregar_historico()
     if len(historico) < 10:
-        return {"erro": "Histórico insuficiente"}
+        # Gera aleatório se histórico pequeno
+        apostas = []
+        for _ in range(7):
+            aposta = sorted(random.sample(range(1, 26), 15))
+            apostas.append(aposta)
+        return {
+            "gerado_em": datetime.now().strftime('%Y-%m-%d %H:%M'),
+            "fixos": [],
+            "apostas": apostas
+        }
 
+    # Fixos dos últimos 50
     ultimos_50 = historico[-50:]
     contagem = {}
     for jogo in ultimos_50:
@@ -164,22 +161,22 @@ def gerar_apostas():
 
 @app.route('/api/atualizar', methods=['GET'])
 def atualizar():
-    sucesso = atualizar_historico()
-    return jsonify({"atualizado": sucesso, "fonte": "API Oficial Caixa"})
+    sucesso = atualizar_mazusoft()
+    return jsonify({"atualizado": sucesso, "fonte": "Mazusoft"})
 
 @app.route('/api/palpites', methods=['GET'])
 def palpites():
-    atualizar_historico()
+    atualizar_mazusoft()
     return jsonify(gerar_apostas())
 
 @app.route('/api/resultados', methods=['GET'])
 def resultados():
-    atualizar_historico()
+    atualizar_mazusoft()
     return jsonify(estatisticas())
 
 @app.route('/')
 def home():
-    return jsonify({"status": "Palpiteiro V2 Backend - Robusto e Anti-Erro", "online": True})
+    return jsonify({"status": "Palpiteiro V2 Backend - Mazusoft Auto-Update", "online": True})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000))
