@@ -14,7 +14,7 @@ CSV_FILE = 'historico_lotofacil.csv'
 MAZU_URL = "https://www.mazusoft.com.br/lotofacil/resultado.php"
 
 def atualizar_mazusoft():
-    """Puxa o último sorteio da Mazusoft e atualiza o CSV"""
+    """Puxa o último sorteio da Mazusfot e atualiza o CSV"""
     try:
         response = requests.get(MAZU_URL, timeout=10)
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -98,13 +98,8 @@ def carregar_historico():
 def estatisticas():
     historico = carregar_historico()
     if not historico:
+        # Retorna JSON de erro aqui, que é tratado corretamente no frontend
         return {
-            "ultimo_concurso": 0,
-            "data_ultimo": "N/A",
-            "ultimos_numeros": [],
-            "quentes": [],
-            "frios": [],
-            "total_sorteios": 0,
             "erro": "Histórico de sorteios está vazio ou não pôde ser carregado."
         }
 
@@ -125,6 +120,9 @@ def estatisticas():
 
 def gerar_apostas():
     historico = carregar_historico()
+    if "erro" in historicas_stats: # Verifica se a estatistica retornou erro
+         return historicas_stats
+
     if len(historico) < 10:
         # Gera aleatório se histórico pequeno
         apostas = []
@@ -142,7 +140,7 @@ def gerar_apostas():
     contagem = {}
     for jogo in ultimos_50:
         for n in jogo['numeros']:
-            contagem[n] = contagem.get(n, 0) + 1
+            contagem = contagem.get(n, 0) + 1
     fixos = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:4]
     fixos_nums = [n for n, c in fixos]
 
@@ -184,7 +182,19 @@ def resultados():
 
 @app.route('/')
 def home():
-    return jsonify({"status": "Palpiteiro V2 Backend - Mazusoft Auto-Update", "online": True})
+    return jsonify({"status": "Palpiteiro V2 Backend - Mazusfot Auto-Update", "online": True})
+
+# NOVO: Tratador de erro 404 (Not Found)
+@app.errorhandler(404)
+def resource_not_found(e):
+    return jsonify(error="O endpoint requisitado não foi encontrado nesta URL. Verifique a documentação da API."), 404
+
+# NOVO: Tratador de erro 500 (Internal Server Error)
+@app.errorhandler(500)
+def internal_server_error(e):
+    return jsonify(error="Ocorreu um erro interno no servidor. Por favor, tente novamente mais tarde."), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000))
+    # Use 0.0.0.0 para que o Render consiga ligar o servidor, e use a porta de ambiente
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
