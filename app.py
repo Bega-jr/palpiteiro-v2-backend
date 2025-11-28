@@ -98,7 +98,15 @@ def carregar_historico():
 def estatisticas():
     historico = carregar_historico()
     if not historico:
-        return {"erro": "Histórico vazio"}
+        return {
+            "ultimo_concurso": 0,
+            "data_ultimo": "N/A",
+            "ultimos_numeros": [],
+            "quentes": [],
+            "frios": [],
+            "total_sorteios": 0,
+            "erro": "Histórico de sorteios está vazio ou não pôde ser carregado."
+        }
 
     todos_numeros = [n for jogo in historico for n in jogo['numeros']]
     contagem = {n: todos_numeros.count(n) for n in range(1, 26)}
