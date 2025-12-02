@@ -1,8 +1,6 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
-from bs4 import BeautifulSoup
-import csv
 import os
 from datetime import datetime
 import random
@@ -10,218 +8,187 @@ import random
 app = Flask(__name__)
 CORS(app)
 
-CSV_FILE = 'historico_lotofacil.csv'
-MAZU_URL = "www.mazusoft.com.br"
+TXT_FILE = 'historico_lotofacil.txt'
+LAST_UPDATE_FILE = 'last_update.txt'
+CAIXA_LOTOFACIL_URL = "https://loterias.caixa.gov.br/wps/wcm/connect/loterias-caixa/landing-lotofacil/lotofacil-historico"
 
-def atualizar_mazusoft():
-    """Puxa o último sorteio da Mazusfot e atualiza o CSV"""
+def baixar_historico_oficial():
+    """Baixa o TXT oficial da Caixa para Lotofácil"""
     try:
-        response = requests.get(MAZU_URL, timeout=10)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Pega o concurso
-        concurso_tag = soup.find('h2')
-        if not concurso_tag:
-            return False
-        concurso = int(''.join(filter(str.isdigit, concurso_tag.text)))
-
-        # Pega os números na ordem de sorteio
-        bolas = soup.find_all('div', class_='bola')
-        numeros = []
-        for b in bolas:
-            num = b.text.strip()
-            if num.isdigit() and len(num) <= 2:
-                numeros.append(int(num))
-        
-        if len(numeros) != 15:
-            return False
-
-        data_sorteio = datetime.now().strftime('%d/%m/%Y')  # Usa data atual se não achar no HTML
-
-        novo_registro = [concurso, data_sorteio] + numeros  # Ordem de sorteio oficial
-
-        # Cria CSV se não existir
-        if not os.path.exists(CSV_FILE):
-            with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f, delimiter='\t')  # Tabulação como o seu
-                writer.writerow(['concurso', 'data'] + [f'n{i}' for i in range(1,16)])
-            ultimo_no_csv = 0
-        else:
-            # Lê último do CSV
-            with open(CSV_FILE, 'r', encoding='utf-8') as f:
-                reader = list(csv.reader(f, delimiter='\t'))
-                # Lida melhor com leitura do último concurso, assume que é o primeiro campo numérico da última linha
-                try:
-                    ultimo_no_csv = int(reader[-1][0]) if len(reader) > 1 else 0
-                except (ValueError, IndexError):
-                    ultimo_no_csv = 0
-
-        if concurso <= ultimo_no_csv:
-            return False
-
-        # Adiciona o novo
-        with open(CSV_FILE, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f, delimiter='\t')
-            writer.writerow(novo_registro)
-
-        print(f"Concurso {concurso} adicionado com sucesso!")
+        print("Baixando histórico oficial da Caixa...")
+        response = requests.get(CAIXA_LOTOFACIL_URL, timeout=30, allow_redirects=True)
+        response.raise_for_status()
+        with open(TXT_FILE, 'wb') as f:
+            f.write(response.content)
+        print("Arquivo oficial baixado e salvo!")
         return True
-
     except Exception as e:
-        print("Erro ao atualizar Mazusoft:", e)
+        print("Erro ao baixar histórico:", e)
         return False
 
 def carregar_historico():
-    if not os.path.exists(CSV_FILE):
+    """Lê o TXT oficial e retorna lista de concursos"""
+    if not os.path.exists(TXT_FILE):
         return []
-    
+
     historico = []
-    with open(CSV_FILE, 'r', encoding='utf-8') as f:
-        reader = csv.reader(f, delimiter='\t')
-        linhas = list(reader)
-        
-        # Pula cabeçalho se existir
-        # Verifica se a primeira linha parece ser um cabeçalho não numérico
-        start = 1 if linhas and not linhas[0][0].isdigit() else 0
-        
-        for linha in linhas[start:]:
-            if len(linha) >= 17:
-                try:
-                    concurso = int(linha[0])
-                    data = linha[1]
-                    # Ajustado para carregar corretamente a partir da terceira coluna (índice 2)
-                    numeros = [int(linha[i]) for i in range(2, 17)] 
-                    historico.append({
-                        'concurso': concurso,
-                        'data': data,
-                        'numeros': numeros
-                    })
-                except (ValueError, IndexError):
-                    continue
-    
-    # Ordena por concurso do mais antigo para o mais novo
+    try:
+        with open(TXT_FILE, 'r', encoding='latin1') as f:  # Encoding da Caixa
+            for linha in f:
+                linha = linha.strip()
+                if linha.startswith('Lotofácil'):
+                    partes = linha.split('\t')
+                    if len(partes) >= 20:  # Suficiente para concurso, data, 15 dezenas
+                        try:
+                            concurso = int(partes[1])
+                            data = partes[2]
+                            numeros = [int(partes[i]) for i in range(5, 20)]  # 15 dezenas na ordem de sorteio
+                            ganhadores = int(partes[20]) if partes[20].isdigit() else 0  # Ganhadores 15 acertos
+                            premio = float(partes[21].replace(',', '.')) if partes[21] else 0.0  # Prêmio 15 acertos
+                            arrecadacao = float(partes[22].replace(',', '.')) if partes[22] else 0.0  # Arrecadação
+                            historico.append({
+                                'concurso': concurso,
+                                'data': data,
+                                'numeros': numeros,
+                                'ganhadores_15': ganhadores,
+                                'premio_15': premio,
+                                'arrecadacao': arrecadacao
+                            })
+                        except (ValueError, IndexError):
+                            continue
+    except Exception as e:
+        print("Erro ao ler TXT:", e)
+
     return sorted(historico, key=lambda x: x['concurso'])
 
-def estatisticas():
+def atualizar_se_necessario():
+    """Verifica e atualiza o arquivo se necessário"""
+    try:
+        ultima_atualizacao = None
+        if os.path.exists(LAST_UPDATE_FILE):
+            with open(LAST_UPDATE_FILE, 'r') as f:
+                ultima_atualizacao = f.read().strip()
+
+        hoje = datetime.now().strftime('%Y-%m-%d')
+        if ultima_atualizacao == hoje:
+            return True
+
+        # Verifica último concurso oficial (API rápida)
+        response = requests.get("https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest", timeout=10)
+        ultimo_oficial = response.json()['concurso'] if response.status_code == 200 else None
+
+        if ultimo_oficial:
+            dados = carregar_historico()
+            ultimo_local = dados[-1]['concurso'] if dados else 0
+            if ultimo_oficial > ultimo_local:
+                print(f"Novo concurso! {ultimo_local} → {ultimo_oficial}")
+                if baixar_historico_oficial():
+                    with open(LAST_UPDATE_FILE, 'w') as f:
+                        f.write(hoje)
+                    return True
+    except Exception as e:
+        print("Erro no update:", e)
+    return False
+
+@app.route('/api/atualizar', methods=['GET'])
+def forcar_atualizacao():
+    baixar_historico_oficial()
+    return jsonify({"status": "Histórico oficial atualizado!"})
+
+@app.route('/api/resultados', methods=['GET'])
+def resultados():
+    atualizar_se_necessario()
     historico = carregar_historico()
     if not historico:
-        # Retorna JSON de erro aqui, que é tratado corretamente no frontend
-        return {
-            "erro": "Histórico de sorteios está vazio ou não pôde ser carregado."
-        }
-
-    todos_numeros = [n for jogo in historico for n in jogo['numeros']]
-    contagem = {n: todos_numeros.count(n) for n in range(1, 26)}
-    # Ordenação por contagem
-    quentes = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:10]
-    frios = sorted(contagem.items(), key=lambda x: x[1])[:10]
-
+        return jsonify({"erro": "Histórico vazio"})
+    
     ultimo = historico[-1]
-    return {
+    # Ganhadores e premiação por faixa (simplificado; expanda com mais colunas do TXT se precisar)
+    ganhadores = [0, 0, 0, 0, 0]  # 11-15 acertos (expanda com dados do TXT)
+    premiacao = [0.0, 0.0, 0.0, 0.0, 0.0]  # Valores por faixa
+
+    return jsonify({
         "ultimo_concurso": ultimo['concurso'],
         "data_ultimo": ultimo['data'],
-        "ultimos_numeros": ultimo['numeros'],  # Ordem de sorteio
-        "quentes": [n for n, c in quentes],
-        "frios": [n for n, c in frios],
+        "numeros_sorteados": ultimo['numeros'],  # Ordem de sorteio
+        "ganhadores_por_faixa": ganhadores,  # 11,12,13,14,15
+        "premiacao_por_faixa": premiacao,  # Valores por faixa
+        "arrecadacao": ultimo['arrecadacao'],
+        "data_referencia": datetime.now().strftime('%d/%m/%Y %H:%M'),
         "total_sorteios": len(historico)
-    }
+    })
 
-# Função auxiliar para verificar a paridade
-def check_paridade(aposta):
-    pares = sum(1 for n in aposta if n % 2 == 0)
-    impares = sum(1 for n in aposta if n % 2 != 0)
-    # Aceita 7/8 ou 8/7
-    return (pares == 7 and impares == 8) or (pares == 8 and impares == 7)
-
-
-def gerar_apostas():
+@app.route('/api/palpites', methods=['GET'])
+def palpites():
+    atualizar_se_necessario()
     historico = carregar_historico()
-    
-    # CORREÇÃO: Verifica se o histórico está vazio e retorna erro JSON tratável
-    if not historico or "erro" in estatisticas(): 
-         return {
-            "erro": "Histórico vazio. Impossível gerar palpites estatísticos."
-         }
-
-    # Restante da lógica (histórico pequeno/grande)
     if len(historico) < 10:
-        apostas = []
-        for _ in range(7):
-            # Garante que até apostas aleatórias sigam a paridade
-            aposta = []
-            while not check_paridade(aposta):
-                 aposta = sorted(random.sample(range(1, 26), 15))
-            apostas.append(aposta)
-        return {
-            "gerado_em": datetime.now().strftime('%Y-%m-%d %H:%M'),
-            "fixos": [],
-            "apostas": apostas
-        }
+        return jsonify({"erro": "Histórico insuficiente para estatísticas"})
 
-    # Fixos dos últimos 50
+    # Fixos dos últimos 50 (mais sorteados, pra acertos 11-15)
     ultimos_50 = historico[-50:]
     contagem = {}
     for jogo in ultimos_50:
         for n in jogo['numeros']:
-            contagem = contagem.get(n, 0) + 1
-    fixos = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:4]
+            contagem[n] = contagem.get(n, 0) + 1
+    fixos = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:5]  # 5 fixos pra desdobramentos
     fixos_nums = [n for n, c in fixos]
 
-    def criar_aposta(base=[]):
-        # Gerador ajustado para forçar a verificação de paridade
-        aposta = []
-        while not check_paridade(aposta):
-            aposta = base[:]
-            candidatos = [n for n in range(1,26) if n not in aposta]
-            while len(aposta) < 15:
-                escolhido = random.choice(candidatos)
-                aposta.append(escolhido)
-                candidatos.remove(escolhido)
+    # Gera 7 desdobramentos baseados em fixos (otimizado pra 11-15 acertos)
+    def criar_desdobramento(base=[]):
+        aposta = base[:]
+        candidatos = [n for n in range(1,26) if n not in aposta]
+        # Peso maior pros números "quentes" (mais sorteados)
+        pesos = [contagem.get(n, 1) for n in candidatos]
+        while len(aposta) < 15:
+            escolhido = random.choices(candidatos, weights=pesos)[0]
+            aposta.append(escolhido)
+            candidatos.remove(escolhido)
+            pesos.pop(candidatos.index(escolhido))  # Ajusta pesos
         return sorted(aposta)
 
-    apostas = []
-    for _ in range(5):
-        apostas.append(criar_aposta(fixos_nums))
-    for _ in range(2):
-        apostas.append(criar_aposta([]))
+    desdobramentos = []
+    for _ in range(7):
+        desdobramento = criar_desdobramento(fixos_nums)
+        desdobramentos.append({
+            "numbers": desdobramento,
+            "fixos": fixos_nums,
+            "stats": {
+                "sum": sum(desdobramento),
+                "even": len([n for n in desdobramento if n % 2 == 0]),
+                "odd": len([n for n in desdobramento if n % 2 != 0])
+            }
+        })
 
-    return {
-        "gerado_em": datetime.now().strftime('%Y-%m-%d %H:%M'),
+    return jsonify({
+        "gerado_em": datetime.now().strftime('%d/%m/%Y %H:%M'),
+        "data_referencia": datetime.now().strftime('%d/%m/%Y'),
         "fixos": fixos_nums,
-        "apostas": apostas
-    }
+        "desdobramentos": desdobramentos
+    })
 
-@app.route('/api/atualizar', methods=['GET'])
-def atualizar():
-    sucesso = atualizar_mazusoft()
-    return jsonify({"atualizado": sucesso, "fonte": "Mazusfot"})
+@app.route('/api/estatisticas', methods=['GET'])
+def estatisticas():
+    atualizar_se_necessario()
+    historico = carregar_historico()
+    if not historico:
+        return jsonify({"erro": "Histórico vazio"})
 
-@app.route('/api/palpites', methods=['GET'])
-def palpites():
-    atualizar_mazusoft()
-    # A função gerar_apostas agora retorna um JSON tratável, mesmo se houver erro
-    return jsonify(gerar_apostas())
+    todos_numeros = [n for jogo in historico for n in jogo['numeros']]
+    contagem = {n: todos_numeros.count(n) for n in range(1, 26)}
+    quentes = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:10]
+    frios = sorted(contagem.items(), key=lambda x: x[1])[:10]
 
-@app.route('/api/resultados', methods=['GET'])
-def resultados():
-    atualizar_mazusoft()
-    # A função estatisticas agora retorna um JSON tratável, mesmo se houver erro
-    return jsonify(estatisticas())
+    return jsonify({
+        "quentes": [n for n, c in quentes],
+        "frios": [n for n, c in frios],
+        "total_sorteios": len(historico),
+        "data_referencia": datetime.now().strftime('%d/%m/%Y')
+    })
 
 @app.route('/')
 def home():
-    return jsonify({"status": "Palpiteiro V2 Backend - Mazusoft Auto-Update", "online": True})
-
-# Tratador de erro 404 (Not Found)
-@app.errorhandler(404)
-def resource_not_found(e):
-    return jsonify(error="O endpoint requisitado não foi encontrado nesta URL. Verifique a documentação da API."), 404
-
-# Tratador de erro 500 (Internal Server Error)
-@app.errorhandler(500)
-def internal_server_error(e):
-    return jsonify(error="Ocorreu um erro interno no servidor. Por favor, tente novamente mais tarde."), 500
+    return jsonify({"status": "Backend Lotofácil - Dados Oficiais Caixa", "versao": "1.0"})
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
