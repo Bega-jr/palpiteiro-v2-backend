@@ -12,82 +12,63 @@ EXCEL_FILE = 'Lotofácil.xlsx'
 
 def carregar_lotofacil():
     if not os.path.exists(EXCEL_FILE):
-        print("Arquivo Lotofácil.xlsx não encontrado!")
         return []
 
     try:
         df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
-        
         lotofacil = []
         for _, row in df.iterrows():
             try:
-                # Extrai as 15 bolas
-                numeros = []
-                for i in range(1, 16):
-                    col = f'Bola{i}'
-                    if col in row and pd.notna(row[col]):
-                        numeros.append(int(row[col]))
-                
-                if len(numeros) != 15:
-                    continue
-
+                numeros = [int(row[f'Bola{i}']) for i in range(1, 16)]
                 concurso = int(row['Concurso'])
                 data = str(row['Data Sorteio']).split(' ')[0]
 
-                # Ganhadores e prêmios (flexível com nomes diferentes)
-                def get_ganhadores(faixa):
-                    colunas = [f'Ganhadores {faixa} acertos', f'Ganhadores {faixa}', f'Ganhadores_{faixa}']
-                    for col in colunas:
-                        if col in row and pd.notna(row[col]):
-                            return int(row[col])
-                    return 0
-
-                def get_premio(faixa):
-                    colunas = [f'Rateio {faixa} acertos', f'Rateio {faixa}', f'Rateio_{faixa}']
-                    for col in colunas:
-                        if col in row and pd.notna(row[col]):
-                            return str(row[col])
-                    return 'R$0,00'
+                # Cidades premiadas (15 acertos)
+                cidades_raw = str(row.get('Cidade / UF', ''))
+                cidades = []
+                if cidades_raw and cidades_raw != 'nan':
+                    for item in cidades_raw.split(';'):
+                        item = item.strip()
+                        if '/' in item:
+                            cidade, uf = item.split('/', 1)
+                            cidades.append({"cidade": cidade.strip(), "uf": uf.strip()})
 
                 lotofacil.append({
                     'concurso': concurso,
                     'data': data,
                     'numeros': numeros,
-                    'ganhadores_15': get_ganhadores(15),
-                    'premio_15': get_premio(15),
-                    'ganhadores_14': get_ganhadores(14),
-                    'premio_14': get_premio(14),
-                    'ganhadores_13': get_ganhadores(13),
-                    'premio_13': get_premio(13),
-                    'ganhadores_12': get_ganhadores(12),
-                    'premio_12': get_premio(12),
-                    'ganhadores_11': get_ganhadores(11),
-                    'premio_11': get_premio(11),
+                    'ganhadores_15': int(row.get('Ganhadores 15 acertos', 0)),
+                    'premio_15': str(row.get('Rateio 15 acertos', 'R$0,00')),
+                    'ganhadores_14': int(row.get('Ganhadores 14 acertos', 0)),
+                    'premio_14': str(row.get('Rateio 14 acertos', 'R$0,00')),
+                    'ganhadores_13': int(row.get('Ganhadores 13 acertos', 0)),
+                    'premio_13': str(row.get('Rateio 13 acertos', 'R$0,00')),
+                    'ganhadores_12': int(row.get('Ganhadores 12 acertos', 0)),
+                    'premio_12': str(row.get('Rateio 12 acertos', 'R$0,00')),
+                    'ganhadores_11': int(row.get('Ganhadores 11 acertos', 0)),
+                    'premio_11': str(row.get('Rateio 11 acertos', 'R$0,00')),
                     'arrecadacao': str(row.get('Arrecadacao Total', 'R$0,00')),
                     'estimativa': str(row.get('Estimativa Prêmio', 'R$0,00')),
-                    'acumulou': 'SIM' in str(row.get('Acumulado 15 acertos', ''))
+                    'acumulou': 'SIM' in str(row.get('Acumulado 15 acertos', '')),
+                    'cidades_15': cidades
                 })
-            except Exception as e:
-                print(f"Erro ao processar linha: {e}")
+            except:
                 continue
-
-        print(f"Carregados {len(lotofacil)} concursos da Lotofácil")
         return sorted(lotofacil, key=lambda x: x['concurso'], reverse=True)
-
     except Exception as e:
-        print("Erro crítico ao ler Excel:", e)
+        print("Erro ao ler Excel:", e)
         return []
 
 @app.route('/api/resultados', methods=['GET'])
 def resultados():
     dados = carregar_lotofacil()
     if not dados:
-        return jsonify({"erro": "Arquivo Excel não encontrado ou corrompido"})
+        return jsonify({"erro": "Arquivo Excel não encontrado"})
 
     ultimo = dados[0]
 
     faixas = [
-        {"faixa": "15 acertos", "ganhadores": ultimo['ganhadores_15'], "premio": ultimo['premio_15']},
+        {"faixa": "15 acertos", "ganhadores": ultimo['ganhadores_15'], "premio": ultimo['premio_15'], "cidades": ultimo['cidades_15']},
         {"faixa": "14 acertos", "ganhadores": ultimo['ganhadores_14'], "premio": ultimo['premio_14']},
         {"faixa": "13 acertos", "ganhadores": ultimo['ganhadores_13'], "premio": ultimo['premio_13']},
         {"faixa": "12 acertos", "ganhadores": ultimo['ganhadores_12'], "premio": ultimo['premio_12']},
@@ -98,7 +79,7 @@ def resultados():
         "ultimo_concurso": ultimo['concurso'],
         "data_ultimo": ultimo['data'],
         "ultimos_numeros": ultimo['numeros'],
-        "ganhadores": faixas,  # ← Agora sempre é array válido
+        "ganhadores": faixas,
         "arrecadacao": ultimo['arrecadacao'],
         "estimativa_proximo": ultimo['estimativa'],
         "acumulou": ultimo['acumulou'],
