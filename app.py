@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import pandas as pd
 import os
@@ -37,14 +37,19 @@ def carregar_lotofacil():
                     'premio_12': str(row.get('Rateio 12 acertos', 'R$0,00')),
                     'ganhadores_11': int(row.get('Ganhadores 11 acertos', 0)),
                     'premio_11': str(row.get('Rateio 11 acertos', 'R$0,00')),
-                    'arrecadacao_total': str(row.get('Arrecadacao Total', 'R$0,00')),
-                    'estimativa_proximo': str(row.get('Estimativa Prêmio', 'R$0,00')),
-                    'acumulou': 'SIM' in str(row.get('Acumulado 15 acertos', ''))
+                    'arrecadacao': str(row.get('Arrecadacao Total', 'R$0,00')),
+                    'estimativa': str(row.get('Estimativa Prêmio', 'R$0,00')),
+                    'acumulado_15': 'SIM' in str(row.get('Acumulado 15 acertos', '')),
+                    'acumulado_especial': str(row.get('Acumulado sorteio especial Lotofácil da Independência', 'R$0,00')),
+                    'observacao': str(row.get('Observação', ''))
                 })
-            except:
+            except Exception as e:
+                print(f"Erro ao processar linha: {e}")
                 continue
 
+        print(f"Carregados {len(lotofacil)} concursos da Lotofácil")
         return sorted(lotofacil, key=lambda x: x['concurso'], reverse=True)
+
     except Exception as e:
         print("Erro ao ler Excel:", e)
         return []
@@ -70,10 +75,54 @@ def resultados():
         "data_ultimo": ultimo['data'],
         "ultimos_numeros": ultimo['numeros'],
         "ganhadores": faixas,
-        "arrecadacao": ultimo['arrecadacao_total'],
-        "estimativa_proximo": ultimo['estimativa_proximo'],
-        "acumulou": ultimo['acumulou'],
+        "arrecadacao": ultimo['arrecadacao'],
+        "estimativa_proximo": ultimo['estimativa'],
+        "acumulou": ultimo['acumulado_15'],
+        "acumulado_especial": ultimo['acumulado_especial'] if ultimo['acumulado_especial'] != 'R$0,00' else '',
+        "observacao": ultimo['observacao'] if ultimo['observacao'] else '',
         "data_referencia": ultimo['data']
+    })
+
+@app.route('/api/conferir-jogo', methods=['POST'])
+def conferir_jogo():
+    data = request.json
+    concurso = data.get('concurso')
+    meu_jogo = data.get('meu_jogo', [])
+
+    if not concurso or len(meu_jogo) != 15:
+        return jsonify({"erro": "Concurso e 15 números obrigatórios"}), 400
+
+    dados = carregar_lotofacil()
+    sorteio = next((d for d in dados if d['concurso'] == concurso), None)
+
+    if not sorteio:
+        return jsonify({"erro": f"Concurso {concurso} não encontrado"}), 404
+
+    numeros_sorteados = sorteio['numeros']
+    acertos = len(set(meu_jogo) & set(numeros_sorteados))
+
+    faixa = '15' if acertos == 15 else '14' if acertos == 14 else '13' if acertos == 13 else '12' if acertos == 12 else '11' if acertos == 11 else 'Menos de 11'
+
+    premio = 0
+    if acertos == 15:
+        premio = sorteio['premio_15']
+    elif acertos == 14:
+        premio = sorteio['premio_14']
+    elif acertos == 13:
+        premio = sorteio['premio_13']
+    elif acertos == 12:
+        premio = sorteio['premio_12']
+    elif acertos == 11:
+        premio = sorteio['premio_11']
+
+    return jsonify({
+        "concurso": concurso,
+        "data": sorteio['data'],
+        "numeros_sorteados": numeros_sorteados,
+        "meu_jogo": meu_jogo,
+        "acertos": acertos,
+        "faixa": faixa,
+        "premio": premio
     })
 
 @app.route('/api/palpites', methods=['GET'])
