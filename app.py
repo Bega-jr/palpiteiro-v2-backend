@@ -32,10 +32,7 @@ def carregar_lotofacil():
                 concurso = int(row['Concurso'])
                 data = str(row['Data Sorteio']).split(' ')[0]
 
-                # Arrecadação e estimativa (nomes exatos do seu Excel)
-                arrecadacao = str(row.get('Arrecadacao Total', 'R$0,00'))
-                estimativa = str(row.get('Estimativa Prêmio', 'R$0,00'))
-
+                # TODOS os dados do Excel oficial
                 lotofacil.append({
                     'concurso': concurso,
                     'data': data,
@@ -50,9 +47,9 @@ def carregar_lotofacil():
                     'premio_12': str(row.get('Rateio 12 acertos', 'R$0,00')),
                     'ganhadores_11': int(row.get('Ganhadores 11 acertos', 0)),
                     'premio_11': str(row.get('Rateio 11 acertos', 'R$0,00')),
-                    'arrecadacao': arrecadacao,
-                    'estimativa_proximo': estimativa,
-                    'acumulou': 'SIM' in str(row.get('Acumulado 15 acertos', '')),
+                    'arrecadacao_total': str(row.get('Arrecadacao Total', 'R$0,00')),
+                    'estimativa_proximo': str(row.get('Estimativa Prêmio', 'R$0,00')),
+                    'acumulado_15': 'SIM' in str(row.get('Acumulado 15 acertos', '')),
                     'acumulado_especial': str(row.get('Acumulado sorteio especial Lotofácil da Independência', 'R$0,00')),
                     'observacao': str(row.get('Observação', ''))
                 })
@@ -88,9 +85,11 @@ def resultados():
         "data_ultimo": ultimo['data'],
         "ultimos_numeros": ultimo['numeros'],
         "ganhadores": faixas,
-        "arrecadacao": ultimo['arrecadacao'],
+        "arrecadacao_total": ultimo['arrecadacao_total'],
         "estimativa_proximo": ultimo['estimativa_proximo'],
-        "acumulou": ultimo['acumulou'],
+        "acumulou": ultimo['acumulado_15'],
+        "acumulado_especial": ultimo['acumulado_especial'],
+        "observacao": ultimo['observacao'],
         "data_referencia": ultimo['data']
     })
 
