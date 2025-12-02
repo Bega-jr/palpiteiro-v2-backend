@@ -32,26 +32,36 @@ def carregar_lotofacil():
                 concurso = int(row['Concurso'])
                 data = str(row['Data Sorteio']).split(' ')[0]
 
-                # TODOS os dados do Excel oficial
+                # Dados com fallback pra evitar NaN
+                def safe_str(value, default=''):
+                    val = str(value) if pd.notna(value) else default
+                    return val if val != 'nan' else default
+
+                def safe_int(value, default=0):
+                    try:
+                        return int(value) if pd.notna(value) else default
+                    except:
+                        return default
+
                 lotofacil.append({
                     'concurso': concurso,
                     'data': data,
                     'numeros': numeros,
-                    'ganhadores_15': int(row.get('Ganhadores 15 acertos', 0)),
-                    'premio_15': str(row.get('Rateio 15 acertos', 'R$0,00')),
-                    'ganhadores_14': int(row.get('Ganhadores 14 acertos', 0)),
-                    'premio_14': str(row.get('Rateio 14 acertos', 'R$0,00')),
-                    'ganhadores_13': int(row.get('Ganhadores 13 acertos', 0)),
-                    'premio_13': str(row.get('Rateio 13 acertos', 'R$0,00')),
-                    'ganhadores_12': int(row.get('Ganhadores 12 acertos', 0)),
-                    'premio_12': str(row.get('Rateio 12 acertos', 'R$0,00')),
-                    'ganhadores_11': int(row.get('Ganhadores 11 acertos', 0)),
-                    'premio_11': str(row.get('Rateio 11 acertos', 'R$0,00')),
-                    'arrecadacao_total': str(row.get('Arrecadacao Total', 'R$0,00')),
-                    'estimativa_proximo': str(row.get('Estimativa Prêmio', 'R$0,00')),
-                    'acumulado_15': 'SIM' in str(row.get('Acumulado 15 acertos', '')),
-                    'acumulado_especial': str(row.get('Acumulado sorteio especial Lotofácil da Independência', 'R$0,00')),
-                    'observacao': str(row.get('Observação', ''))
+                    'ganhadores_15': safe_int(row.get('Ganhadores 15 acertos', 0)),
+                    'premio_15': safe_str(row.get('Rateio 15 acertos', 'R$0,00')),
+                    'ganhadores_14': safe_int(row.get('Ganhadores 14 acertos', 0)),
+                    'premio_14': safe_str(row.get('Rateio 14 acertos', 'R$0,00')),
+                    'ganhadores_13': safe_int(row.get('Ganhadores 13 acertos', 0)),
+                    'premio_13': safe_str(row.get('Rateio 13 acertos', 'R$0,00')),
+                    'ganhadores_12': safe_int(row.get('Ganhadores 12 acertos', 0)),
+                    'premio_12': safe_str(row.get('Rateio 12 acertos', 'R$0,00')),
+                    'ganhadores_11': safe_int(row.get('Ganhadores 11 acertos', 0)),
+                    'premio_11': safe_str(row.get('Rateio 11 acertos', 'R$0,00')),
+                    'arrecadacao': safe_str(row.get('Arrecadacao Total', 'R$0,00')),
+                    'estimativa': safe_str(row.get('Estimativa Prêmio', 'R$0,00')),
+                    'acumulado_15': 'SIM' in safe_str(row.get('Acumulado 15 acertos', '')),
+                    'acumulado_especial': safe_str(row.get('Acumulado sorteio especial Lotofácil da Independência', 'R$0,00')),
+                    'observacao': safe_str(row.get('Observação', ''))
                 })
             except Exception as e:
                 print(f"Erro ao processar linha: {e}")
@@ -85,11 +95,11 @@ def resultados():
         "data_ultimo": ultimo['data'],
         "ultimos_numeros": ultimo['numeros'],
         "ganhadores": faixas,
-        "arrecadacao_total": ultimo['arrecadacao_total'],
-        "estimativa_proximo": ultimo['estimativa_proximo'],
+        "arrecadacao": ultimo['arrecadacao'],
+        "estimativa_proximo": ultimo['estimativa'],
         "acumulou": ultimo['acumulado_15'],
-        "acumulado_especial": ultimo['acumulado_especial'],
-        "observacao": ultimo['observacao'],
+        "acumulado_especial": ultimo['acumulado_especial'] if ultimo['acumulado_especial'] != 'R$0,00' else '',
+        "observacao": ultimo['observacao'] if ultimo['observacao'] else '',
         "data_referencia": ultimo['data']
     })
 
