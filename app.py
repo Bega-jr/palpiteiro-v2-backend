@@ -12,6 +12,7 @@ EXCEL_FILE = 'Lotofácil.xlsx'
 
 def carregar_lotofacil():
     if not os.path.exists(EXCEL_FILE):
+        print("Arquivo Lotofácil.xlsx não encontrado!")
         return []
 
     try:
@@ -19,42 +20,61 @@ def carregar_lotofacil():
         lotofacil = []
         for _, row in df.iterrows():
             try:
-                numeros = [int(row[f'Bola{i}']) for i in range(1, 16)]
+                # Extrai as 15 bolas
+                numeros = []
+                for i in range(1, 16):
+                    bola_col = f'Bola{i}'
+                    if bola_col in row and pd.notna(row[bola_col]):
+                        numeros.append(int(row[bola_col]))
+                
+                if len(numeros) != 15:
+                    continue
+
                 concurso = int(row['Concurso'])
                 data = str(row['Data Sorteio']).split(' ')[0]
 
-                # Cidades premiadas (15 acertos)
-                cidades_raw = str(row.get('Cidade / UF', ''))
-                cidades = []
-                if cidades_raw and cidades_raw != 'nan':
-                    for item in cidades_raw.split(';'):
-                        item = item.strip()
-                        if '/' in item:
-                            cidade, uf = item.split('/', 1)
-                            cidades.append({"cidade": cidade.strip(), "uf": uf.strip()})
+                # Função flexível pra pegar ganhadores e prêmios (lida com nomes variados)
+                def get_ganhadores(faixa):
+                    col_ganh = f'Ganhadores {faixa} acertos'
+                    if col_ganh not in row or pd.isna(row[col_ganh]):
+                        col_ganh = f'Ganhadores_{faixa}'
+                        if col_ganh not in row or pd.isna(row[col_ganh]):
+                            return 0
+                    return int(row[col_ganh])
+
+                def get_premio(faixa):
+                    col_premio = f'Rateio {faixa} acertos'
+                    if col_premio not in row or pd.isna(row[col_premio]):
+                        col_premio = f'Rateio_{faixa}'
+                        if col_premio not in row or pd.isna(row[col_premio]):
+                            return 'R$0,00'
+                    return str(row[col_premio])
 
                 lotofacil.append({
                     'concurso': concurso,
                     'data': data,
                     'numeros': numeros,
-                    'ganhadores_15': int(row.get('Ganhadores 15 acertos', 0)),
-                    'premio_15': str(row.get('Rateio 15 acertos', 'R$0,00')),
-                    'ganhadores_14': int(row.get('Ganhadores 14 acertos', 0)),
-                    'premio_14': str(row.get('Rateio 14 acertos', 'R$0,00')),
-                    'ganhadores_13': int(row.get('Ganhadores 13 acertos', 0)),
-                    'premio_13': str(row.get('Rateio 13 acertos', 'R$0,00')),
-                    'ganhadores_12': int(row.get('Ganhadores 12 acertos', 0)),
-                    'premio_12': str(row.get('Rateio 12 acertos', 'R$0,00')),
-                    'ganhadores_11': int(row.get('Ganhadores 11 acertos', 0)),
-                    'premio_11': str(row.get('Rateio 11 acertos', 'R$0,00')),
+                    'ganhadores_15': get_ganhadores(15),
+                    'premio_15': get_premio(15),
+                    'ganhadores_14': get_ganhadores(14),
+                    'premio_14': get_premio(14),
+                    'ganhadores_13': get_ganhadores(13),
+                    'premio_13': get_premio(13),
+                    'ganhadores_12': get_ganhadores(12),
+                    'premio_12': get_premio(12),
+                    'ganhadores_11': get_ganhadores(11),
+                    'premio_11': get_premio(11),
                     'arrecadacao': str(row.get('Arrecadacao Total', 'R$0,00')),
                     'estimativa': str(row.get('Estimativa Prêmio', 'R$0,00')),
-                    'acumulou': 'SIM' in str(row.get('Acumulado 15 acertos', '')),
-                    'cidades_15': cidades
+                    'acumulou': 'SIM' in str(row.get('Acumulado 15 acertos', ''))
                 })
-            except:
+            except Exception as e:
+                print(f"Erro ao processar linha: {e}")
                 continue
+
+        print(f"Carregados {len(lotofacil)} concursos da Lotofácil")
         return sorted(lotofacil, key=lambda x: x['concurso'], reverse=True)
+
     except Exception as e:
         print("Erro ao ler Excel:", e)
         return []
@@ -62,13 +82,13 @@ def carregar_lotofacil():
 @app.route('/api/resultados', methods=['GET'])
 def resultados():
     dados = carregar_lotofacil()
-    if not dados:
-        return jsonify({"erro": "Arquivo Excel não encontrado"})
+    if not dados or len(dados) == 0:
+        return jsonify({"erro": "Arquivo Excel não encontrado ou corrompido"})
 
     ultimo = dados[0]
 
     faixas = [
-        {"faixa": "15 acertos", "ganhadores": ultimo['ganhadores_15'], "premio": ultimo['premio_15'], "cidades": ultimo['cidades_15']},
+        {"faixa": "15 acertos", "ganhadores": ultimo['ganhadores_15'], "premio": ultimo['premio_15']},
         {"faixa": "14 acertos", "ganhadores": ultimo['ganhadores_14'], "premio": ultimo['premio_14']},
         {"faixa": "13 acertos", "ganhadores": ultimo['ganhadores_13'], "premio": ultimo['premio_13']},
         {"faixa": "12 acertos", "ganhadores": ultimo['ganhadores_12'], "premio": ultimo['premio_12']},
@@ -79,7 +99,7 @@ def resultados():
         "ultimo_concurso": ultimo['concurso'],
         "data_ultimo": ultimo['data'],
         "ultimos_numeros": ultimo['numeros'],
-        "ganhadores": faixas,
+        "ganhadores": faixas,  # ← Sempre array válido
         "arrecadacao": ultimo['arrecadacao'],
         "estimativa_proximo": ultimo['estimativa'],
         "acumulou": ultimo['acumulou'],
@@ -90,7 +110,18 @@ def resultados():
 def palpites():
     dados = carregar_lotofacil()
     if len(dados) < 10:
-        return jsonify({"erro": "Histórico insuficiente"})
+        # Retorna palpites aleatórios se histórico pequeno
+        apostas = []
+        for _ in range(7):
+            aposta = sorted(random.sample(range(1, 26), 15))
+            apostas.append(aposta)
+        return jsonify({
+            "gerado_em": datetime.now().strftime('%d/%m/%Y %H:%M'),
+            "ultimo_concurso": "N/A",
+            "data_ultimo": "N/A",
+            "fixos": [],
+            "apostas": apostas  # ← Sempre array válido
+        })
 
     ultimos_50 = dados[:50]
     contagem = {}
@@ -120,7 +151,7 @@ def palpites():
         "ultimo_concurso": ultimo['concurso'],
         "data_ultimo": ultimo['data'],
         "fixos": fixos,
-        "apostas": apostas
+        "apostas": apostas  # ← Sempre array válido
     })
 
 @app.route('/')
