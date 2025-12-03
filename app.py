@@ -12,7 +12,6 @@ EXCEL_FILE = 'Lotofácil.xlsx'
 
 def carregar_lotofacil():
     if not os.path.exists(EXCEL_FILE):
-        print("Arquivo Lotofácil.xlsx não encontrado!")
         return []
 
     try:
@@ -20,20 +19,9 @@ def carregar_lotofacil():
         lotofacil = []
         for _, row in df.iterrows():
             try:
-                # 15 números na ordem oficial
                 numeros = [int(row[f'Bola{i}']) for i in range(1, 16)]
                 concurso = int(row['Concurso'])
                 data = str(row['Data Sorteio']).split(' ')[0]
-
-                # Cidades premiadas (15 acertos)
-                cidades_raw = str(row.get('Cidade / UF', ''))
-                cidades = []
-                if cidades_raw and cidades_raw != 'nan':
-                    for item in cidades_raw.split(';'):
-                        item = item.strip()
-                        if '/' in item:
-                            cidade, uf = item.split('/', 1)
-                            cidades.append({"cidade": cidade.strip(), "uf": uf.strip()})
 
                 lotofacil.append({
                     'concurso': concurso,
@@ -53,8 +41,7 @@ def carregar_lotofacil():
                     'estimativa': str(row.get('Estimativa Prêmio', 'R$0,00')),
                     'acumulado_15': 'SIM' in str(row.get('Acumulado 15 acertos', '')),
                     'acumulado_especial': str(row.get('Acumulado sorteio especial Lotofácil da Independência', 'R$0,00')),
-                    'observacao': str(row.get('Observação', '')),
-                    'cidades_premiadas': cidades
+                    'observacao': str(row.get('Observação', ''))
                 })
             except Exception as e:
                 print(f"Erro ao processar linha: {e}")
@@ -76,7 +63,7 @@ def resultados():
     ultimo = dados[0]
 
     faixas = [
-        {"faixa": "15 acertos", "ganhadores": ultimo['ganhadores_15'], "premio": ultimo['premio_15'], "cidades": ultimo['cidades_premiadas']},
+        {"faixa": "15 acertos", "ganhadores": ultimo['ganhadores_15'], "premio": ultimo['premio_15']},
         {"faixa": "14 acertos", "ganhadores": ultimo['ganhadores_14'], "premio": ultimo['premio_14']},
         {"faixa": "13 acertos", "ganhadores": ultimo['ganhadores_13'], "premio": ultimo['premio_13']},
         {"faixa": "12 acertos", "ganhadores": ultimo['ganhadores_12'], "premio": ultimo['premio_12']},
@@ -94,48 +81,6 @@ def resultados():
         "acumulado_especial": ultimo['acumulado_especial'] if ultimo['acumulado_especial'] != 'R$0,00' else '',
         "observacao": ultimo['observacao'] if ultimo['observacao'] else '',
         "data_referencia": ultimo['data']
-    })
-
-@app.route('/api/conferir-jogo', methods=['POST'])
-def conferir_jogo():
-    data = request.json
-    concurso = data.get('concurso')
-    meu_jogo = data.get('meu_jogo', [])
-
-    if not concurso or len(meu_jogo) != 15:
-        return jsonify({"erro": "Concurso e 15 números obrigatórios"}), 400
-
-    dados = carregar_lotofacil()
-    sorteio = next((d for d in dados if d['concurso'] == concurso), None)
-
-    if not sorteio:
-        return jsonify({"erro": f"Concurso {concurso} não encontrado"}), 404
-
-    numeros_sorteados = sorteio['numeros']
-    acertos = len(set(meu_jogo) & set(numeros_sorteados))
-
-    faixa = '15' if acertos == 15 else '14' if acertos == 14 else '13' if acertos == 13 else '12' if acertos == 12 else '11' if acertos == 11 else 'Menos de 11'
-
-    premio = 0
-    if acertos == 15:
-        premio = sorteio['premio_15']
-    elif acertos == 14:
-        premio = sorteio['premio_14']
-    elif acertos == 13:
-        premio = sorteio['premio_13']
-    elif acertos == 12:
-        premio = sorteio['premio_12']
-    elif acertos == 11:
-        premio = sorteio['premio_11']
-
-    return jsonify({
-        "concurso": concurso,
-        "data": sorteio['data'],
-        "numeros_sorteados": numeros_sorteados,
-        "meu_jogo": meu_jogo,
-        "acertos": acertos,
-        "faixa": faixa,
-        "premio": premio
     })
 
 @app.route('/api/palpites', methods=['GET'])
