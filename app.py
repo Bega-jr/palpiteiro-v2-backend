@@ -12,6 +12,7 @@ EXCEL_FILE = 'Lotofácil.xlsx'
 
 def carregar_lotofacil():
     if not os.path.exists(EXCEL_FILE):
+        print("Arquivo Lotofácil.xlsx não encontrado!")
         return []
 
     try:
@@ -19,9 +20,20 @@ def carregar_lotofacil():
         lotofacil = []
         for _, row in df.iterrows():
             try:
+                # 15 números na ordem oficial
                 numeros = [int(row[f'Bola{i}']) for i in range(1, 16)]
                 concurso = int(row['Concurso'])
                 data = str(row['Data Sorteio']).split(' ')[0]
+
+                # Cidades premiadas (15 acertos)
+                cidades_raw = str(row.get('Cidade / UF', ''))
+                cidades = []
+                if cidades_raw and cidades_raw != 'nan':
+                    for item in cidades_raw.split(';'):
+                        item = item.strip()
+                        if '/' in item:
+                            cidade, uf = item.split('/', 1)
+                            cidades.append({"cidade": cidade.strip(), "uf": uf.strip()})
 
                 lotofacil.append({
                     'concurso': concurso,
@@ -41,7 +53,8 @@ def carregar_lotofacil():
                     'estimativa': str(row.get('Estimativa Prêmio', 'R$0,00')),
                     'acumulado_15': 'SIM' in str(row.get('Acumulado 15 acertos', '')),
                     'acumulado_especial': str(row.get('Acumulado sorteio especial Lotofácil da Independência', 'R$0,00')),
-                    'observacao': str(row.get('Observação', ''))
+                    'observacao': str(row.get('Observação', '')),
+                    'cidades_premiadas': cidades
                 })
             except Exception as e:
                 print(f"Erro ao processar linha: {e}")
@@ -63,7 +76,7 @@ def resultados():
     ultimo = dados[0]
 
     faixas = [
-        {"faixa": "15 acertos", "ganhadores": ultimo['ganhadores_15'], "premio": ultimo['premio_15']},
+        {"faixa": "15 acertos", "ganhadores": ultimo['ganhadores_15'], "premio": ultimo['premio_15'], "cidades": ultimo['cidades_premiadas']},
         {"faixa": "14 acertos", "ganhadores": ultimo['ganhadores_14'], "premio": ultimo['premio_14']},
         {"faixa": "13 acertos", "ganhadores": ultimo['ganhadores_13'], "premio": ultimo['premio_13']},
         {"faixa": "12 acertos", "ganhadores": ultimo['ganhadores_12'], "premio": ultimo['premio_12']},
@@ -160,6 +173,58 @@ def palpites():
         "data_ultimo": ultimo['data'],
         "fixos": fixos,
         "apostas": apostas
+    })
+
+@app.route('/api/estatisticas', methods=['GET'])
+def estatisticas():
+    dados = carregar_lotofacil()
+    if not dados:
+        return jsonify({"erro": "Histórico não encontrado"}), 404
+
+    # Últimos 50 concursos
+    ultimos_50 = dados[:50]
+    contagem = {}
+    for jogo in ultimos_50:
+        for n in jogo['numeros']:
+            contagem[n] = contagem.get(n, 0) + 1
+
+    mais_sorteados = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:10]
+    menos_sorteados = sorted(contagem.items(), key=lambda x: x[1])[:10]
+
+    # Moda
+    moda = mais_sorteados[0][0] if mais_sorteados else 0
+
+    # Números atrasados (não saíram nos últimos 20 concursos)
+    todos_numeros = set(range(1, 26))
+    sorteados_recentes = set()
+    for jogo in dados[:20]:
+        sorteados_recentes.update(jogo['numeros'])
+    atrasados = sorted(todos_numeros - sorteados_recentes)
+
+    # Soma média
+    somas = [sum(jogo['numeros']) for jogo in dados]
+    soma_media = round(sum(somas) / len(somas)) if somas else 0
+
+    # Pares x ímpares médio
+    pares_total = sum(1 for jogo in dados for n in jogo['numeros'] if n % 2 == 0)
+    impares_total = sum(1 for jogo in dados for n in jogo['numeros'] if n % 2 != 0)
+    media_pares = round(pares_total / len(dados))
+    media_impares = round(impares_total / len(dados))
+
+    # Números por final
+    finais = {i: 0 for i in range(10)}
+    for jogo in dados:
+        for n in jogo['numeros']:
+            finais[n % 10] += 1
+
+    return jsonify({
+        "maisSorteados": [{"numero": n, "vezes": c} for n, c in mais_sorteados],
+        "menosSorteados": [{"numero": n, "vezes": c} for n, c in menos_sorteados],
+        "moda": moda,
+        "atrasados": atrasados,
+        "somaMedia": soma_media,
+        "paresImpares": {"pares": media_pares, "impares": media_impares},
+        "finais": finais
     })
 
 @app.route('/')
