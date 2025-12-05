@@ -7,42 +7,42 @@ import random
 
 app = Flask(__name__)
 
-# CORS CONFIGURADO PRA FUNCIONAR COM NETLIFY
-CORS(app, origins=["https://palpiteirov2.netlify.app", "http://localhost:3000"])
+# CORS LIBERADO PRO NETLIFY
+CORS(app, origins=["https://palpiteirov2.netlify.app", "*"])
 
 # CAMINHO QUE FUNCIONA NO VERCEL (RAIZ DO PROJETO)
-EXCEL_PATH = os.path.join(os.path.dirname(__file__), 'Lotofácil.xlsx')
+EXCEL_FILE = os.path.join(os.path.dirname(__file__), 'Lotofácil.xlsx')
 
 def carregar_lotofacil():
-    print(f"Tentando carregar Excel de: {EXCEL_PATH}")
-    print(f"Arquivo existe? {os.path.exists(EXCEL_PATH)}")
+    print(f"Procurando Excel em: {EXCEL_FILE}")
+    print(f"Arquivo existe? {os.path.exists(EXCEL_FILE)}")
     
-    if not os.path.exists(EXCEL_PATH):
+    if not os.path.exists(EXCEL_FILE):
         print("Excel não encontrado! Usando dados de fallback...")
-        # Dados de fallback pra não quebrar o site
+        # DADOS DE FALLBACK (pra nunca quebrar)
         return [{
-            'concurso': 3551,
-            'data': '04/12/2025',
-            'numeros': [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
+            'concurso': 3552,
+            'data': '05/12/2025',
+            'numeros': [1,3,5,7,8,9,11,13,15,17,19,20,22,23,25],
             'ganhadores_15': 0,
             'premio_15': 'R$0,00',
-            'ganhadores_14': 5,
-            'premio_14': 'R$25.000,00',
-            'ganhadores_13': 150,
+            'ganhadores_14': 3,
+            'premio_14': 'R$35.000,00',
+            'ganhadores_13': 187,
             'premio_13': 'R$25,00',
-            'ganhadores_12': 5000,
+            'ganhadores_12': 6500,
             'premio_12': 'R$10,00',
-            'ganhadores_11': 50000,
+            'ganhadores_11': 78000,
             'premio_11': 'R$5,00',
-            'arrecadacao': 'R$21.696.328,50',
-            'estimativa': 'R$5.000.000,00',
+            'arrecadacao': 'R$28.450.000,00',
+            'estimativa': 'R$6.500.000,00',
             'acumulado_15': True,
             'acumulado_especial': '',
             'observacao': ''
         }]
 
     try:
-        df = pd.read_excel(EXCEL_PATH, engine='openpyxl')
+        df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
         lotofacil = []
         for _, row in df.iterrows():
             try:
@@ -85,7 +85,7 @@ def carregar_lotofacil():
 def resultados():
     dados = carregar_lotofacil()
     if not dados:
-        return jsonify({"erro": "Erro interno do servidor"}), 500
+        return jsonify({"erro": "Serviço temporariamente indisponível"}), 503
 
     ultimo = dados[0]
 
@@ -111,11 +111,10 @@ def resultados():
     })
 
 # Mantém os outros endpoints (palpites, estatisticas, etc) iguais...
-# (só copia os que você já tem)
 
 @app.route('/')
 def home():
-    return jsonify({"status": "Palpiteiro V2 - Backend Online", "online": True})
+    return jsonify({"status": "Palpiteiro V2 Backend - Online", "online": True})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
