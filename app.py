@@ -4,7 +4,7 @@ import pandas as pd
 import os
 
 app = Flask(__name__)
-CORS(app, origins=["*"])  # ← AQUI TÁ O SEGREDO
+CORS(app)  # ← SEM NADA DENTRO, LIBERA TUDO MESMO
 
 EXCEL_FILE = "Lotofácil.xlsx"
 
