@@ -1,0 +1,29 @@
+name: Atualizar Excel da Caixa
+
+on:
+  schedule:
+    - cron: '0 21 * * *'   # Todo dia às 21h (horário de Brasília)
+  workflow_dispatch:       # Permite rodar manualmente
+
+jobs:
+  atualizar-excel:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Baixar Excel oficial da Caixa
+        run: |
+          curl -L -o Lotofácil.xlsx "https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
+          echo "Excel baixado com sucesso!"
+
+      - name: Commit e push automático
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add Lotofácil.xlsx
+          git commit -m "Atualização automática do Excel - $(date +'%d/%m/%Y às %H:%M')" || echo "Nada para commitar"
+          git push origin main || echo "Nada para pushar"
