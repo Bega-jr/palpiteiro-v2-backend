@@ -4,6 +4,9 @@ import pandas as pd
 import os
 from datetime import datetime
 import random
+# No topo do app.py
+import os
+EXCEL_FILE = os.path.join(os.path.dirname(__file__), 'data', 'Lotofácil.xlsx')
 
 app = Flask(__name__)
 CORS(app)
