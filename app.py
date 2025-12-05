@@ -1,12 +1,14 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 from flask_cors import CORS
 import pandas as pd
 import os
+import random
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app, origins=["https://palpiteirov2.netlify.app", "*"])
 
-# EXCEL NA RAIZ
+# ARQUIVO NA RAIZ
 EXCEL_FILE = "Lotofácil.xlsx"
 
 def carregar_lotofacil():
@@ -109,9 +111,68 @@ def estatisticas():
         "finais": finais
     })
 
+# PALPITES VIP ULTRA ACERTIVOS
+@app.route('/api/palpites-vip')
+def palpites_vip():
+    dados = carregar_lotofacil()
+    if not dados or len(dados) < 100:
+        return jsonify({"erro": "Histórico insuficiente"}), 503
+
+    ultimos_100 = dados[:100]
+    
+    # CONTAGEM + ATRASO + FINAIS
+    contagem = {}
+    atraso = {n: 0 for n in range(1, 26)}
+    finais = {i: 0 for i in range(10)}
+    
+    for i, jogo in enumerate(dados):
+        for n in jogo['numeros']:
+            contagem[n] = contagem.get(n, 0) + 1
+            finais[n % 10] += 1
+        for n in range(1, 26):
+            if n not in jogo['numeros']:
+                atraso[n] = i + 1
+
+    # BASE FORTE
+    quentes = [n for n, _ in sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:6]]
+    atrasados = [n for n, c in sorted(atraso.items(), key=lambda x: x[1], reverse=True) if c > 12][:4]
+    finais_top = []
+    for f in sorted(finais.items(), key=lambda x: x[1], reverse=True)[:4]:
+        for n in range(1, 26):
+            if n % 10 == f[0] and n not in quentes + atrasados + finais_top:
+                finais_top.append(n)
+                break
+
+    base_forte = list(set(quentes[:4] + atrasados[:3] + finais_top[:3]))
+
+    def gerar_aposta():
+        aposta = base_forte.copy()
+        candidatos = [n for n in range(1, 26) if n not in aposta]
+        while len(aposta) < 15:
+            pesos = [contagem.get(n, 0) * 3 + atraso.get(n, 0) + finais[n % 10] * 2 for n in candidatos]
+            escolhido = random.choices(candidatos, weights=pesos)[0]
+            aposta.append(escolhido)
+            candidatos.remove(escolhido)
+        return sorted(aposta)
+
+    apostas = [gerar_aposta() for _ in range(7)]
+
+    return jsonify({
+        "base_forte": sorted(base_forte),
+        "quentes": sorted(quentes),
+        "atrasados": sorted(atrasados),
+        "finais_top": sorted(finais_top),
+        "apostas": apostas,
+        "gerado_em": datetime.now().strftime('%d/%m/%Y %H:%M')
+    })
+
 @app.route('/')
 def home():
-    return jsonify({"status": "Backend Online", "excel": os.path.exists(EXCEL_FILE)})
+    return jsonify({
+        "status": "Palpiteiro V2 Backend - Online",
+        "excel": os.path.exists(EXCEL_FILE),
+        "endpoints": ["/api/resultados", "/api/estatisticas", "/api/palpites-vip"]
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
