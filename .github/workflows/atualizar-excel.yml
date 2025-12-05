@@ -2,47 +2,38 @@ name: Atualizar Excel da Caixa
 
 on:
   schedule:
-    - cron: '0 21 * * *'    # Todo dia às 21h (horário de Brasília)
-  workflow_dispatch:        # Permite rodar manualmente
+    - cron: '0 21 * * *'
+  workflow_dispatch:
 
 jobs:
   atualizar-excel:
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # ESSENCIAL: permite fazer push no repositório
-      pull-requests: write
+      contents: write
 
     steps:
-      - name: Checkout do repositório
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Instalar LibreOffice (pra converter .xls → .xlsx)
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y libreoffice
+      - name: Instalar LibreOffice
+        run: sudo apt-get update -qq && sudo apt-get install -y libreoffice
 
-      - name: Baixar e converter Excel oficial da Caixa
+      - name: Baixar e converter Excel
         run: |
-          mkdir -p data
-          echo "Baixando Excel da Caixa..."
-          curl -L -o data/temp.xls "https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
-          echo "Convertendo .xls para .xlsx..."
-          libreoffice --headless --convert-to xlsx data/temp.xls --outdir data
-          mv data/temp.xlsx data/Lotofácil.xlsx
-          rm -f data/temp.xls
-          echo "Excel convertido e salvo em data/Lotofácil.xlsx"
+          curl -L -o temp.xls "https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
+          libreoffice --headless --convert-to xlsx temp.xls
+          mv temp.xlsx Lotofácil.xlsx
+          rm -f temp.xls
 
       - name: Commit e push
         run: |
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
-          git add data/Lotofácil.xlsx
-          git commit -m "Atualização automática do Excel - $(date +'%d/%m/%Y às %H:%M')" || echo "Nada para commitar"
-          git push origin main || echo "Falha no push (pode ser que não tenha mudanças)"
+          git add Lotofácil.xlsx
+          git commit -m "Atualização automática do Excel - $(date +'%d/%m/%Y às %H:%M')" || echo "Nada pra commitar"
+          git push origin main
 
-      - name: Disparar rebuild no Vercel (limpa cache)
-        run: |
-          echo "Disparando rebuild no Vercel..."
-          curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
+      - name: Trigger Vercel Deploy
+        run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
