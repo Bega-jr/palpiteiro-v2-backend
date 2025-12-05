@@ -183,7 +183,7 @@
                             <path
                                 d="M9.78378 2.01351H8.83783V1.06757C8.83783 0.917039 8.77804 0.772676 8.6716 0.666237C8.56516 0.559797 8.42079 0.5 8.27027 0.5C8.11974 0.5 7.97538 0.559797 7.86894 0.666237C7.7625 0.772676 7.7027 0.917039 7.7027 1.06757V2.01351H4.29729V1.06757C4.29729 0.917039 4.2375 0.772676 4.13106 0.666237C4.02462 0.559797 3.88025 0.5 3.72973 0.5C3.5792 0.5 3.43484 0.559797 3.3284 0.666237C3.22196 0.772676 3.16216 0.917039 3.16216 1.06757V2.01351H2.21621C1.66428 2.01351 1.13494 2.23277 0.744666 2.62305C0.354388 3.01333 0.135132 3.54266 0.135132 4.09459V12.4189C0.135132 12.9709 0.354388 13.5002 0.744666 13.8905C1.13494 14.2807 1.66428 14.5 2.21621 14.5H9.78378C10.3357 14.5 10.865 14.2807 11.2553 13.8905C11.6456 13.5002 11.8649 12.9709 11.8649 12.4189V4.09459C11.8649 3.54266 11.6456 3.01333 11.2553 2.62305C10.865 2.23277 10.3357 2.01351 9.78378 2.01351ZM2.21621 3.14865H3.16216V4.09459C3.16216 4.24512 3.22196 4.38949 3.3284 4.49593C3.43484 4.60237 3.5792 4.66216 3.72973 4.66216C3.88025 4.66216 4.02462 4.60237 4.13106 4.49593C4.2375 4.38949 4.29729 4.24512 4.29729 4.09459V3.14865H7.7027V4.09459C7.7027 4.24512 7.7625 4.38949 7.86894 4.49593C7.97538 4.60237 8.11974 4.66216 8.27027 4.66216C8.42079 4.66216 8.56516 4.60237 8.6716 4.49593C8.77804 4.38949 8.83783 4.24512 8.83783 4.09459V3.14865H9.78378C10.0347 3.14865 10.2753 3.24831 10.4527 3.42571C10.6301 3.60311 10.7297 3.84371 10.7297 4.09459V6.17568H1.27027V4.09459C1.27027 3.84371 1.36993 3.60311 1.54733 3.42571C1.72473 3.24831 1.96533 3.14865 2.21621 3.14865ZM9.78378 13.3649H2.21621C1.96533 13.3649 1.72473 13.2652 1.54733 13.0878C1.36993 12.9104 1.27027 12.6698 1.27027 12.4189V7.31081H10.7297V12.4189C10.7297 12.6698 10.6301 12.9104 10.4527 13.0878C10.2753 13.2652 10.0347 13.3649 9.78378 13.3649Z"
                                 fill="#F4F4F4" />
-                        </svg></span><span class="card-details__value">2025-12-05 12:05:03</span></p>
+                        </svg></span><span class="card-details__value">2025-12-05 12:11:34</span></p>
                 <p class="card-details__row--icon"><span class="card-details__icon"><svg width="14" height="23"
                             viewBox="0 0 14 23" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <g clip-path="url(#clip0_115_176)">
@@ -198,14 +198,14 @@
                             </defs>
                         </svg></span><span class="card-details__value tooltip" title="www.caixa.gov.br/Downloads/lotofacil/Lotofacil.xls">www.caixa.gov.br/Downloads/lotofacil/Lotofacil.xls</span></p>
                 <p class="card-details__row--icon"><span class="card-details__label">Your IP</span><span
-                        class="card-details__value">172.172.86.226</span></p>
+                        class="card-details__value">20.171.126.210</span></p>
                 <hr>
                 <p class="card-details__row"><span class="card-details__label">Request ID</span><span
-                        class="card-details__value" id="request_id_str">61830cf480d36ab23b6167aae5847d01</span></p>
+                        class="card-details__value" id="request_id_str">869a96e6a1c56bc2934c25523261f154</span></p>
                 <p class="card-details__row"><span class="card-details__label">Status Code</span><span
                         class="card-details__value">429</span></p>
                 <p class="card-details__row"><span class="card-details__label">Edge Location</span><span
-                        class="card-details__value">EWR</span></p>
+                        class="card-details__value">SEA</span></p>
             </div>
         </main>
     </div>
