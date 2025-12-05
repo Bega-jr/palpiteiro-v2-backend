@@ -17,20 +17,32 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Baixar Excel da Caixa
+      - name: Baixar Excel da Caixa (com retry e delay)
         run: |
-          echo "Baixando Excel oficial da Caixa..."
-          curl -L -o Lotofácil.xlsx "https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
+          echo "Tentando baixar o Excel da Caixa..."
+          for i in {1..5}; do
+            echo "Tentativa $i..."
+            if curl -L --fail -o Lotofácil.xlsx "https://loterias.caixa.gov.br/Paginas/Download-Resultados.aspx"; then
+              echo "Download bem-sucedido!"
+              break
+            else
+              echo "Falhou, esperando 30 segundos..."
+              sleep 30
+            fi
+            if [ $i -eq 5 ]; then
+              echo "Falha após 5 tentativas. Usando versão local."
+              exit 1
+            fi
+          done
 
       - name: Commit e push
         run: |
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
           git add Lotofácil.xlsx
-          DATA=$(date '+%d/%m/%Y às %H:%M')
-          git commit -m "Atualização automática do Excel - $DATA" || echo "Nada para commitar"
+          git commit -m "Atualização automática do Excel - $(date +'%d/%m/%Y às %H:%M')" || echo "Nada para commitar"
           git push origin main --force-with-lease
 
-      - name: Disparar rebuild no Vercel
+      - name: Trigger Vercel Deploy
         run: |
           curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
