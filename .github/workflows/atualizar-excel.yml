@@ -2,14 +2,14 @@ name: Atualizar Excel da Caixa
 
 on:
   schedule:
-    - cron: '0 21 * * *'
+    - cron: '0 21 * * *  # Todo dia às 21h (Brasília)
   workflow_dispatch:
 
 jobs:
   atualizar-excel:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write    # Obrigatório pra fazer push
 
     steps:
       - name: Checkout
@@ -17,23 +17,21 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Instalar LibreOffice
-        run: sudo apt-get update -qq && sudo apt-get install -y libreoffice
-
-      - name: Baixar e converter Excel
+      - name: Baixar Excel da Caixa (na raiz!)
         run: |
-          curl -L -o temp.xls "https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
-          libreoffice --headless --convert-to xlsx temp.xls
-          mv temp.xlsx Lotofácil.xlsx
-          rm -f temp.xls
+          echo "Baixando Excel oficial da Caixa..."
+          curl -L -o Lotofácil.xlsx "https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
+          echo "Excel baixado e salvo na raiz como Lotofácil.xlsx"
 
-      - name: Commit e push
+      - name: Commit e push (forçado)
         run: |
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
           git add Lotofácil.xlsx
           git commit -m "Atualização automática do Excel - $(date +'%d/%m/%Y às %H:%M')" || echo "Nada pra commitar"
-          git push origin main
+          git push origin main --force-with-lease
 
-      - name: Trigger Vercel Deploy
-        run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
+      - name: Disparar rebuild no Vercel
+        run: |
+          echo "Disparando rebuild no Vercel..."
+          curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
