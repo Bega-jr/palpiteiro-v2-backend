@@ -4,17 +4,21 @@ import pandas as pd
 import os
 from datetime import datetime
 import random
-# No topo do app.py
-import os
-EXCEL_FILE = os.path.join(os.path.dirname(__file__), 'data', 'Lotofácil.xlsx')
 
 app = Flask(__name__)
 CORS(app)
 
-EXCEL_FILE = 'Lotofácil.xlsx'
+# CAMINHO ABSOLUTO E GARANTIDO NO VERCEL
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+EXCEL_FILE = os.path.join(BASE_DIR, 'data', 'Lotofácil.xlsx')
 
 def carregar_lotofacil():
+    # Debug pra ver se tá achando o arquivo
+    print(f"Procurando Excel em: {EXCEL_FILE}")
+    print(f"Arquivo existe? {os.path.exists(EXCEL_FILE)}")
+    
     if not os.path.exists(EXCEL_FILE):
+        print("Arquivo Excel não encontrado!")
         return []
 
     try:
@@ -61,7 +65,7 @@ def carregar_lotofacil():
 def resultados():
     dados = carregar_lotofacil()
     if not dados:
-        return jsonify({"erro": "Arquivo Excel não encontrado ou corrompido"})
+        return jsonify({"erro": "Arquivo Excel não encontrado ou corrompido"}), 500
 
     ultimo = dados[0]
 
@@ -129,37 +133,31 @@ def estatisticas():
     if not dados:
         return jsonify({"erro": "Histórico não encontrado"}), 404
 
-    # Últimos 50 concursos
     ultimos_50 = dados[:50]
     contagem = {}
     for jogo in ultimos_50:
         for n in jogo['numeros']:
-            contagem[n] = contagem.get(n, 0) + 1
+            contagem[n] = contagem.get n, 0) + 1
 
     mais_sorteados = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:10]
     menos_sorteados = sorted(contagem.items(), key=lambda x: x[1])[:10]
 
-    # Moda
     moda = mais_sorteados[0][0] if mais_sorteados else 0
 
-    # Números atrasados (não saíram nos últimos 20 concursos)
     todos_numeros = set(range(1, 26))
     sorteados_recentes = set()
     for jogo in dados[:20]:
         sorteados_recentes.update(jogo['numeros'])
     atrasados = sorted(todos_numeros - sorteados_recentes)
 
-    # Soma média
     somas = [sum(jogo['numeros']) for jogo in dados]
     soma_media = round(sum(somas) / len(somas)) if somas else 0
 
-    # Pares x ímpares médio
     pares_total = sum(1 for jogo in dados for n in jogo['numeros'] if n % 2 == 0)
     impares_total = sum(1 for jogo in dados for n in jogo['numeros'] if n % 2 != 0)
     media_pares = round(pares_total / len(dados))
     media_impares = round(impares_total / len(dados))
 
-    # Números por final
     finais = {i: 0 for i in range(10)}
     for jogo in dados:
         for n in jogo['numeros']:
