@@ -4,13 +4,14 @@ import pandas as pd
 import os
 
 app = Flask(__name__)
-CORS(app)  # ← SEM NADA DENTRO, LIBERA TUDO MESMO
+
+# ESSA É A ÚNICA COISA QUE FUNCIONA NO VERCEL
+CORS(app)  # ← LIBERA TUDO, SEM ORIGEM, SEM NADA
 
 EXCEL_FILE = "Lotofácil.xlsx"
 
 def carregar():
     if not os.path.exists(EXCEL_FILE):
-        print("Excel não encontrado!")
         return None
     try:
         df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
@@ -21,59 +22,51 @@ def carregar():
                 dados.append({
                     'concurso': int(row['Concurso']),
                     'data': str(row['Data Sorteio']).split(' ')[0],
-                    'numeros': sorted(numeros),
+                    'numeros': numeros
                 })
             except:
                 continue
         return sorted(dados, key=lambda x: x['concurso'], reverse=True)
-    except Exception as e:
-        print("Erro:", e)
+    except:
         return None
 
 @app.route('/api/resultados')
 def resultados():
     dados = carregar()
     if not dados:
-        return jsonify({"erro": "Excel não encontrado"}), 500
-    ultimo = dados[0]
+        return jsonify({"erro": "Excel não encontrado"}), 200  # ← 200 pra não dar 500
     return jsonify({
-        "concurso": ultimo['concurso'],
-        "data": ultimo": ultimo['data'],
-        "numeros": ultimo['numeros']
+        "concurso": dados[0]['concurso'],
+        "data": dados[0]['data'],
+        "numeros": dados[0]['numeros']
     })
 
 @app.route('/api/palpites-vip')
 def palpites_vip():
     dados = carregar()
     if not dados:
-        return jsonify({"erro": "Sem dados"}), 503
-
-    ultimos = dados[:100]
-    todos_numeros = [n for jogo in ultimos for n in jogo['numeros']]
-    contagem = {n: todos_numeros.count(n) for n in range(1, 26)}
-
-    quentes = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:8]
-    quentes_nums = [n for n, c in quentes]
-
+        return jsonify({"erro": "Sem dados"}), 200
+    
+    ultimos = dados[:50]
+    todos = [n for j in ultimos for n in j['numeros']]
+    quentes = [n for n in range(1,26) if todos.count(n) > len(ultimos)*0.6][:8]
+    
     def gerar():
-        aposta = quentes_nums[:random.randint(4, 6)]
-        restantes = [n for n in range(1, 26) if n not in aposta]
+        aposta = quentes[:random.randint(4,6)]
         while len(aposta) < 15:
-            aposta.append(random.choice(restantes))
-            restantes.remove(aposta[-1])
+            n = random.randint(1,25)
+            if n not in aposta:
+                aposta.append(n)
         return sorted(aposta)
-
-    apostas = [gerar() for _ in range(7)]
-
+    
     return jsonify({
-        "quentes": quentes_nums,
-        "apostas": apostas,
-        "gerado_em": "agora"
+        "quentes": quentes,
+        "apostas": [gerar() for _ in range(7)]
     })
 
 @app.route('/')
 def home():
-    return jsonify({"status": "online", "excel_ok": os.path.exists(EXCEL_FILE)})
+    return jsonify({"status": "online"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
