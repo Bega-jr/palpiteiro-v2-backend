@@ -32,3 +32,6 @@ jobs:
           git add Lotofácil.xlsx
           git commit -m "Atualização automática do Excel - $(date +'%d/%m/%Y às %H:%M')" || echo "Nada pra commitar"
           git push origin main
+                - name: Trigger Vercel Deploy (limpa cache automaticamente)
+        run: |
+          curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
