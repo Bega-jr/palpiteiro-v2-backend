@@ -126,14 +126,14 @@ var MSOWebPartPageFormName = 'aspnetForm';
 var g_presenceEnabled = true;
 var g_wsaEnabled = false;
 
-var g_correlationId = '2b7be0a1-362e-901e-49ec-06da77bd8af8';
+var g_correlationId = '8ccde0a1-7647-901e-49ec-032f71ed4310';
 var g_wsaQoSEnabled = false;
 var g_wsaQoSDataPoints = [];
 var g_wsaRUMEnabled = false;
 var g_wsaLCID = 1046;
 var g_wsaListTemplateId = 850;
 var g_wsaSiteTemplateId = 'BLANKINTERNET#0';
-var _fV4UI=true;var _spPageContextInfo = {webServerRelativeUrl: "\u002f", webAbsoluteUrl: "https:\u002f\u002floterias.caixa.gov.br", siteAbsoluteUrl: "https:\u002f\u002floterias.caixa.gov.br", serverRequestPath: "\u002fPaginas\u002fDownload-Resultados.aspx", layoutsUrl: "_layouts\u002f15", webTitle: "Portal Loterias", webTemplate: "53", tenantAppVersion: "0", isAppWeb: false, Has2019Era: true, webLogoUrl: "_layouts\u002f15\u002fimages\u002fsiteicon.png", webLanguage: 1046, currentLanguage: 1046, currentUICultureName: "pt-BR", currentCultureName: "pt-BR", clientServerTimeDelta: new Date("2025-12-06T21:16:21.6347005Z") - new Date(), updateFormDigestPageLoaded: new Date("2025-12-06T21:16:21.6347005Z"), siteClientTag: "337$$16.0.5513.1001", crossDomainPhotosEnabled:false, webUIVersion:15, webPermMasks:{High:16,Low:196673},pageListId:"{fd4b65c5-a1e0-4a7d-9eac-7c1af4ba5f24}",pageItemId:17, pagePersonalizationScope:1, alertsEnabled:false, customMarkupInCalculatedFieldDisabled: true, siteServerRelativeUrl: "\u002f", allowSilverlightPrompt:'True', isSiteAdmin: false};document.onreadystatechange=fnRemoveAllStatus; function fnRemoveAllStatus(){removeAllStatus(true)};Flighting.ExpFeatures = [480215056,1880287568,1561350208,302071836,3212816,69472768,4194310,-2113396707,268502022,-872284160,1049232,-2147421952,65536,65536,2097472,917504,-2147474174,1372324107,67108882,0,0,-2147483648,2097152,0,0,32768,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32768]; (function()
+var _fV4UI=true;var _spPageContextInfo = {webServerRelativeUrl: "\u002f", webAbsoluteUrl: "https:\u002f\u002floterias.caixa.gov.br", siteAbsoluteUrl: "https:\u002f\u002floterias.caixa.gov.br", serverRequestPath: "\u002fPaginas\u002fDownload-Resultados.aspx", layoutsUrl: "_layouts\u002f15", webTitle: "Portal Loterias", webTemplate: "53", tenantAppVersion: "0", isAppWeb: false, Has2019Era: true, webLogoUrl: "_layouts\u002f15\u002fimages\u002fsiteicon.png", webLanguage: 1046, currentLanguage: 1046, currentUICultureName: "pt-BR", currentCultureName: "pt-BR", clientServerTimeDelta: new Date("2025-12-07T21:16:02.5826637Z") - new Date(), updateFormDigestPageLoaded: new Date("2025-12-07T21:16:02.5826637Z"), siteClientTag: "337$$16.0.5513.1001", crossDomainPhotosEnabled:false, webUIVersion:15, webPermMasks:{High:16,Low:196673},pageListId:"{fd4b65c5-a1e0-4a7d-9eac-7c1af4ba5f24}",pageItemId:17, pagePersonalizationScope:1, alertsEnabled:false, customMarkupInCalculatedFieldDisabled: true, siteServerRelativeUrl: "\u002f", allowSilverlightPrompt:'True', isSiteAdmin: false};document.onreadystatechange=fnRemoveAllStatus; function fnRemoveAllStatus(){removeAllStatus(true)};Flighting.ExpFeatures = [480215056,1880287568,1561350208,302071836,3212816,69472768,4194310,-2113396707,268502022,-872284160,1049232,-2147421952,65536,65536,2097472,917504,-2147474174,1372324107,67108882,0,0,-2147483648,2097152,0,0,32768,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32768]; (function()
 {
     if(typeof(window.SP) == "undefined") window.SP = {};
     if(typeof(window.SP.YammerSwitch) == "undefined") window.SP.YammerSwitch = {};
@@ -401,7 +401,7 @@ var _fV4UI=true;var _spPageContextInfo = {webServerRelativeUrl: "\u002f", webAbs
         if (!((formDigestElement == null) || (formDigestElement.tagName.toLowerCase() != 'input') || (formDigestElement.type.toLowerCase() != 'hidden') ||
             (formDigestElement.value == null) || (formDigestElement.value.length <= 0)))
         {
-            formDigestElement.value = '0xFDF757DB3541776C2347BF0BBEB7D389CDC45079EE3C664E3CA1C11FBCEAAA058B9D5561C4738867D5CA30BE1812321D1E78CFDC2E767D0979066A8CF38CF39B,06 Dec 2025 21:16:21 -0000';_spPageContextInfo.updateFormDigestPageLoaded = new Date();
+            formDigestElement.value = '0xADFFF3DED9091588A10F28F7A1DA5F51EB196D624FF5FCF7D66C3F80080DCF3FB88AE5A1AE7BB036E975B46E65D2CF4F68ECE6CC8302D0A51489BC5D9E4CA333,07 Dec 2025 21:16:02 -0000';_spPageContextInfo.updateFormDigestPageLoaded = new Date();
         }
         //]]>
         </script>
@@ -444,4 +444,4 @@ var g_clientIdDeltaPlaceHolderUtilityContent = "DeltaPlaceHolderUtilityContent";
 //]]>
 </script>
 </form><span id="DeltaPlaceHolderUtilityContent"></span></body>
-</html><!-- Renderizado com o uso do perfil de cache:Internet Pública (Somente Anônimo) em: 2025-12-06T18:16:21 -->
+</html><!-- Renderizado com o uso do perfil de cache:Internet Pública (Somente Anônimo) em: 2025-12-07T18:16:02 -->
