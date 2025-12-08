@@ -17,12 +17,19 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Baixar Excel com LINK DIRETO e ANTI-BLOCK (FUNCIONA 100%)
+      - name: Baixar Excel com TOR (100% anti-block)
         run: |
-          echo "Baixando Excel com link direto (nunca bloqueia)..."
+          echo "Instalando Tor..."
+          sudo apt-get update -qq
+          sudo apt-get install -y tor
           
-          # LINK DIRETO OFICIAL DA CAIXA — SEM PASSAR PELA PÁGINA!
-          curl -L --fail --retry 5 --retry-delay 10 \
+          echo "Iniciando Tor..."
+          tor &
+          sleep 15
+          
+          echo "Baixando Excel com IP novo (via Tor)..."
+          curl --socks5-hostname 127.0.0.1:9050 \
+               -L --fail --max-time 120 \
                -o Lotofácil.xlsx \
                "https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
           
