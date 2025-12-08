@@ -34,6 +34,3 @@
           echo "DOWNLOAD CONCLUÍDO!"
           ls -la Lotofácil.xlsx
           file Lotofácil.xlsx
-
-      - name: Trigger Vercel Deploy
-        run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
