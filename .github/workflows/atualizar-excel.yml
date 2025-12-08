@@ -1,13 +1,62 @@
-- name: Baixar Excel da Caixa (via API direta)
+name: Atualizar Excel da Caixa
+
+on:
+  schedule:
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Baixar Excel via API Oficial da Caixa
         run: |
-          API_URL="https://servicebus2.caixa.gov.br/portaldeloterias/api/resultados/download?modalidade=Lotof%C3%A1cil"
+          echo "Acessando API oficial da Caixa para Lotofácil..."
           
-          echo "Tentando baixar o Excel via API..."
+          # 1. Pega o JSON com o link do Excel
+          curl -L -s -H "Accept: application/json" \
+               -o api_response.json \
+               "https://servicebus2.caixa.gov.br/portaldeloterias/api/resultados/download?modalidade=Lotof%C3%A1cil"
           
-          # Usamos curl com retry, mas agora para o URL da API
-          curl -L --fail --retry 5 --retry-delay 30 \
-               -o Lotofácil.xlsx "$API_URL"
+          echo "JSON baixado. Extrai o link..."
           
-          echo "Download concluído com sucesso!"
+          # 2. Extrai o URL do arquivo do JSON
+          EXCEL_URL=$(jq -r '.lista[0].fileName' api_response.json)
+          
+          if [ -z "$EXCEL_URL" ]; then
+            echo "Erro: Link não encontrado no JSON"
+            exit 1
+          fi
+          
+          FULL_URL="https://servicebus2.caixa.gov.br$EXCEL_URL"
+          echo "Link do Excel: $FULL_URL"
+          
+          # 3. Baixa o arquivo real
+          echo "Baixando Excel da Lotofácil..."
+          curl -L --fail -o Lotofácil.xls "$FULL_URL"
+          
+          # 4. Renomeia pra .xlsx (pra funcionar no pandas)
+          mv Lotofácil.xls Lotofácil.xlsx
+          
+          echo "DOWNLOAD CONCLUÍDO!"
           ls -la Lotofácil.xlsx
           file Lotofácil.xlsx
+
+      - name: Commit e push
+        run: |
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add Lotofácil.xlsx
+          git commit -m "Atualização automática do Excel - $(date '+%d/%m/%Y às %H:%M')" || echo "Nada pra commitar"
+          git push origin main --force-with-lease
+
+      - name: Trigger Vercel Deploy
+        run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
