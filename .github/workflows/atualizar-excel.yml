@@ -19,19 +19,33 @@ jobs:
 
       - name: Baixar Excel da Caixa (link direto oficial)
         run: |
-          echo "Baixando Excel com o link direto oficial da Caixa (nunca falha)..."
+          echo "Baixando Excel com o link direto oficial da Caixa (solução para erro 429)..."
           
           # LINK DIRETO OFICIAL DA CAIXA — FUNCIONA 100% EM 09/12/2025
           DIRECT_URL="https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
+          OUTPUT_FILE="Lotofácil.xlsx"
           
-          # Baixa com retry e delay (anti-block)
+          # A solução para o erro 429 (Too Many Requests) é adicionar um User-Agent
+          # que simule um navegador comum, pois o servidor da Caixa bloqueia
+          # requisições sem essa informação.
+          # Adiciona o header -A (User-Agent) para simular um navegador.
           curl -L --fail --retry 5 --retry-delay 15 \
-               -o Lotofácil.xlsx \
+               -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+               -o "$OUTPUT_FILE" \
                "$DIRECT_URL"
           
-          echo "EXCEL BAIXADO COM SUCESSO!"
-          ls -la Lotofácil.xlsx
-          file Lotofácil.xlsx
+          EXIT_CODE=$?
+          
+          if [ $EXIT_CODE -eq 0 ]; then
+              echo "EXCEL BAIXADO COM SUCESSO!"
+              ls -la "$OUTPUT_FILE"
+              file "$OUTPUT_FILE"
+          else
+              echo "ERRO NO DOWNLOAD. Código de saída do curl: $EXIT_CODE"
+              # O erro 22 é o código de saída do curl para "HTTP page not retrieved"
+              # que inclui o 429.
+              exit $EXIT_CODE
+          fi
 
       - name: Commit e push
         run: |
