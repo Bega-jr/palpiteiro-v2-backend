@@ -1,74 +1,44 @@
-name: Atualizar Excel da Caixa
-
-on:
-  # Roda todo dia às 21:00 UTC (00:00 ou 01:00 no horário de Brasília)
-  schedule:
-    - cron: '0 21 * * *'
-  # Permite rodar manualmente na interface do GitHub
-  workflow_dispatch:
-
-jobs:
-  atualizar:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout do repositório
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Baixar Excel da Caixa (encontrando link dinâmico)
+      - name: Baixar Excel da Caixa (link dinâmico corrigido)
         run: |
-          # Define o User-Agent para simular um navegador Chrome
-          USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-          PAGE_URL="loterias.caixa.gov.br"
-
-          echo "Baixando a página para encontrar o link do Excel..."
+          # User-Agent pra navegador real
+          USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
+          PAGE_URL="https://loterias.caixa.gov.br/Paginas/Download-Resultados.aspx"  # ← CORREÇÃO AQUI
+          echo "Baixando página oficial..."
           
-          # 1. Baixa o HTML da página usando o User-Agent
+          # 1. Baixa o HTML completo
           curl -A "$USER_AGENT" -L --fail -o pagina_download.html "$PAGE_URL"
           
-          echo "Página baixada. Procurando pelo URL do arquivo Excel..."
+          echo "Página baixada. Procurando links..."
+          cat pagina_download.html | grep -i -o -E 'href=[\'"]?([^\'" >]+)' | grep -i -E '(lotof|fac|xls|zip)' | head -n 5
           
-          # 2. **ATUALIZAÇÃO:** Extrai o primeiro URL que termina em .zip ou .xls
-          # Isso é mais resiliente a mudanças de nome de arquivo pela Caixa
-          EXCEL_URL=$(grep -oP 'href="\K[^"]*\.(zip|xls)"' pagina_download.html | head -n 1 | tr -d '\r')
+          # 2. Extrai o link do Lotofácil (padrão atual da Caixa)
+          EXCEL_URL=$(grep -oP 'href="\K[^"]*lotof[^"]*\.(xls|zip)' pagina_download.html | head -n 1 | tr -d '\r')
           
           if [ -z "$EXCEL_URL" ]; then
-            echo "Erro: Não foi possível extrair o URL do arquivo Excel/Zip da página. A estrutura do site mudou novamente ou o arquivo não está lá."
+            echo "Link não encontrado. Procurando qualquer .xls..."
+            EXCEL_URL=$(grep -oP 'href="\K[^"]*\.xls[^"]*' pagina_download.html | head -n 1 | tr -d '\r')
+          fi
+          
+          if [ -z "$EXCEL_URL" ]; then
+            echo "ERRO: Nenhum link encontrado. Usando fallback."
             exit 1
           fi
           
-          # A URL extraída é relativa, precisamos adicionar o domínio completo da CAIXA
-          # Verifica se a URL já é completa (começa com /)
+          # 3. Adiciona o domínio se for relativo
           if [[ "$EXCEL_URL" == /* ]]; then
             FULL_URL="https://loterias.caixa.gov.br$EXCEL_URL"
           else
             FULL_URL="$EXCEL_URL"
           fi
-
-          echo "URL do Excel encontrado: $FULL_URL"
+          echo "URL FINAL: $FULL_URL"
           
-          # 3. Baixa o arquivo Excel real usando o User-Agent
-          echo "Iniciando download do Excel a partir do link dinâmico..."
-          # Salvamos como ZIP, que é o formato comum da Caixa
+          # 4. Baixa o arquivo
+          echo "Baixando Excel..."
           curl -A "$USER_AGENT" -L --fail -o Lotofácil.zip "$FULL_URL"
           
           echo "Download concluído!"
           ls -la Lotofácil.zip
           file Lotofácil.zip
-
-      - name: Commit e push
-        run: |
-          git config user.name "GitHub Action"
-          git config user.email "action@github.com"
-          # Adiciona o arquivo ZIP baixado
-          git add Lotofácil.zip
-          git commit -m "Atualização automática do Excel - $(date '+%d/%m/%Y às %H:%M')" || echo "Nada pra commitar"
-          git push origin main --force-with-lease
-
       - name: Trigger Vercel Deploy
         # Garanta que você configurou SECRETS.VERCEL_DEPLOY_HOOK no seu repositório
         run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
