@@ -1,36 +1,13 @@
-      - name: Baixar Excel da Caixa (100% FUNCIONANDO AGORA)
+- name: Baixar Excel da Caixa (via API direta)
         run: |
-          # User-Agent pra parecer navegador real
-          USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
-
-          # PÁGINA CORRETA ONDE ESTÁ O LINK
-          PAGE_URL="https://loterias.caixa.gov.br/Paginas/Download-Resultados.aspx"
-
-          echo "Acessando página oficial da Caixa..."
-          curl -s -A "$USER_AGENT" -L --fail -o pagina.html "$PAGE_URL"
-
-          echo "Procurando link do Lotofácil..."
+          API_URL="https://servicebus2.caixa.gov.br/portaldeloterias/api/resultados/download?modalidade=Lotof%C3%A1cil"
           
-          # LINK DIRETO ATUAL (testado agora mesmo!)
-          EXCEL_URL=$(grep -o 'https://[^"]*Lotofacil[^"]*\.xls' pagina.html | head -n 1)
+          echo "Tentando baixar o Excel via API..."
           
-          # Fallback caso mude o nome
-          if [ -z "$EXCEL_URL" ]; then
-            EXCEL_URL=$(grep -o 'https://[^"]*\.xls' pagina.html | grep -i lotof | head -n 1)
-          fi
+          # Usamos curl com retry, mas agora para o URL da API
+          curl -L --fail --retry 5 --retry-delay 30 \
+               -o Lotofácil.xlsx "$API_URL"
           
-          # Último recurso: link direto eterno da Caixa
-          if [ -z "$EXCEL_URL" ]; then
-            EXCEL_URL="https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
-          fi
-
-          echo "Link encontrado: $EXCEL_URL"
-
-          # BAIXA O ARQUIVO REAL
-          echo "Baixando Excel da Lotofácil..."
-          curl -L -A "$USER_AGENT" --fail --retry 3 --retry-delay 15 \
-               -o Lotofácil.xlsx "$EXCEL_URL"
-
-          echo "DOWNLOAD CONCLUÍDO!"
+          echo "Download concluído com sucesso!"
           ls -la Lotofácil.xlsx
           file Lotofácil.xlsx
