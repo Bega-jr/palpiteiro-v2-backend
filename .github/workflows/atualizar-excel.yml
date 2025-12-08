@@ -1,48 +1,28 @@
-name: Atualizar Excel da Caixa
-
-on:
-  schedule:
-    - cron: '0 21 * * *'
-  workflow_dispatch:
-
-jobs:
-  atualizar-excel:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Baixar Excel da Caixa (com retry e delay)
+ - name: Baixar Excel da Caixa (encontrando o link dinâmico)
         run: |
-          echo "Tentando baixar o Excel da Caixa..."
-          for i in {1..5}; do
-            echo "Tentativa $i..."
-            if curl -L --fail -o Lotofácil.xlsx "https://loterias.caixa.gov.br/Paginas/Download-Resultados.aspx"; then
-              echo "Download bem-sucedido!"
-              break
-            else
-              echo "Falhou, esperando 30 segundos..."
-              sleep 30
-            fi
-            if [ $i -eq 5 ]; then
-              echo "Falha após 5 tentativas. Usando versão local."
-              exit 1
-            fi
-          done
-
-      - name: Commit e push
-        run: |
-          git config user.name "GitHub Action"
-          git config user.email "action@github.com"
-          git add Lotofácil.xlsx
-          git commit -m "Atualização automática do Excel - $(date +'%d/%m/%Y às %H:%M')" || echo "Nada para commitar"
-          git push origin main --force-with-lease
-
-      - name: Trigger Vercel Deploy
-        run: |
-          curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
+          PAGE_URL="https://loterias.caixa.gov.br/Paginas/Download-Resultados.aspx"
+          echo "Baixando a página para encontrar o link do Excel..."
+          
+          # 1. Baixa o HTML da página para um arquivo temporário
+          curl -L --fail -o pagina_download.html "$PAGE_URL"
+          
+          echo "Página baixada. Procurando pelo URL do arquivo Excel..."
+          
+          # 2. Extrai o URL do Excel usando grep e sed (procura por links que contenham 'D_Lotof')
+          # Isso procura a linha que tem o link e extrai apenas o valor do atributo 'href'
+          EXCEL_URL=$(grep -oP 'href="\K[^"]*D_Lotof[^"]*' pagina_download.html | head -n 1)
+          
+          if [ -z "$EXCEL_URL" ]; then
+            echo "Erro: Não foi possível extrair o URL do arquivo Excel da página."
+            exit 1
+          fi
+          
+          # A URL extraída é relativa, precisamos adicionar o domínio completo da CAIXA
+          FULL_URL="https://loterias.caixa.gov.br$EXCEL_URL"
+          echo "URL do Excel encontrado: $FULL_URL"
+          
+          # 3. Baixa o arquivo Excel real
+          echo "Iniciando download do Excel..."
+          curl -L --fail -o Lotofácil.xlsx "$FULL_URL"
+          
+          echo "Download do Lotofácil.xlsx concluído com sucesso!"
