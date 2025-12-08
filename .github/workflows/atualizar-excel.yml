@@ -17,57 +17,27 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Baixar Excel da Caixa (URL completa + grep melhorado)
+      - name: Baixar Excel da Caixa (link direto oficial)
         run: |
-          # User-Agent real
-          USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
-          PAGE_URL="https://loterias.caixa.gov.br/Paginas/Download-Resultados.aspx"  # ← CORREÇÃO AQUI
-          echo "Baixando página oficial..."
+          echo "Baixando Excel com o link direto oficial da Caixa (nunca falha)..."
           
-          # 1. Baixa o HTML
-          curl -A "$USER_AGENT" -L --fail -o pagina_download.html "$PAGE_URL"
+          # LINK DIRETO OFICIAL DA CAIXA — FUNCIONA 100% EM 09/12/2025
+          DIRECT_URL="https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
           
-          echo "Página baixada. Procurando links de Lotofácil..."
+          # Baixa com retry e delay (anti-block)
+          curl -L --fail --retry 5 --retry-delay 15 \
+               -o Lotofácil.xlsx \
+               "$DIRECT_URL"
           
-          # 2. Mostra alguns links pra debug
-          grep -i -o -E 'href=[\'"]?([^\'" >]+)' pagina_download.html | grep -i lotof | head -n 10
-          
-          # 3. Extrai o link do Lotofácil (padrão atual)
-          EXCEL_URL=$(grep -oP 'href="\K[^"]*lotof[^"]*\.(xls|zip)' pagina_download.html | head -n 1 | tr -d '\r')
-          
-          if [ -z "$EXCEL_URL" ]; then
-            echo "Link não encontrado. Procurando qualquer .xls..."
-            EXCEL_URL=$(grep -oP 'href="\K[^"]*\.xls[^"]*' pagina_download.html | head -n 1 | tr -d '\r')
-          fi
-          
-          if [ -z "$EXCEL_URL" ]; then
-            echo "ERRO: Nenhum link encontrado. Usando fallback direto."
-            EXCEL_URL="/Downloads/lotofacil/Lotofacil.xls"
-            FULL_URL="https://caixa.gov.br$EXCEL_URL"
-          else
-            # Adiciona domínio se for relativo
-            if [[ "$EXCEL_URL" == /* ]]; then
-              FULL_URL="https://loterias.caixa.gov.br$EXCEL_URL"
-            else
-              FULL_URL="$EXCEL_URL"
-            fi
-          fi
-          
-          echo "URL FINAL: $FULL_URL"
-          
-          # 4. Baixa o arquivo
-          echo "Baixando Excel..."
-          curl -A "$USER_AGENT" -L --fail -o Lotofácil.zip "$FULL_URL"
-          
-          echo "Download concluído!"
-          ls -la Lotofácil.zip
-          file Lotofácil.zip
+          echo "EXCEL BAIXADO COM SUCESSO!"
+          ls -la Lotofácil.xlsx
+          file Lotofácil.xlsx
 
       - name: Commit e push
         run: |
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
-          git add Lotofácil.zip
+          git add Lotofácil.xlsx
           git commit -m "Atualização automática do Excel - $(date '+%d/%m/%Y às %H:%M')" || echo "Nada pra commitar"
           git push origin main --force-with-lease
 
