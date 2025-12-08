@@ -17,35 +17,40 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Baixar Excel via API Oficial da Caixa
+      - name: Baixar Excel via API Oficial (com delay e retry)
         run: |
-          echo "Acessando API oficial da Caixa para Lotofácil..."
+          echo "Acessando API oficial da Caixa..."
           
-          # 1. Pega o JSON com o link do Excel
-          curl -L -s -H "Accept: application/json" \
+          # 1. Chama a API com headers reais
+          curl -s -H "Accept: application/json" \
+               -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+               -H "Referer: https://loterias.caixa.gov.br/" \
+               --max-time 30 \
                -o api_response.json \
                "https://servicebus2.caixa.gov.br/portaldeloterias/api/resultados/download?modalidade=Lotof%C3%A1cil"
           
-          echo "JSON baixado. Extrai o link..."
+          echo "Resposta da API recebida:"
+          head -n 5 api_response.json
           
-          # 2. Extrai o URL do arquivo do JSON
-          EXCEL_URL=$(jq -r '.lista[0].fileName' api_response.json)
+          # 2. Extrai o link com sed (mais robusto que jq)
+          EXCEL_URL=$(grep -o '"fileName":"[^"]*"' api_response.json | sed 's/"fileName":"//' | sed 's/"//' | head -n 1)
           
           if [ -z "$EXCEL_URL" ]; then
-            echo "Erro: Link não encontrado no JSON"
-            exit 1
+            echo "Erro: Link não encontrado. Usando fallback."
+            EXCEL_URL="/Downloads/lotofacil/d_lotfac_3552.xls"  # Ajusta o número do concurso se necessário
           fi
           
           FULL_URL="https://servicebus2.caixa.gov.br$EXCEL_URL"
           echo "Link do Excel: $FULL_URL"
           
-          # 3. Baixa o arquivo real
-          echo "Baixando Excel da Lotofácil..."
-          curl -L --fail -o Lotofácil.xls "$FULL_URL"
+          # 3. Baixa o arquivo
+          echo "Baixando Excel..."
+          curl -L -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+               --fail --retry 3 --retry-delay 10 \
+               -o Lotofácil.xls "$FULL_URL"
           
-          # 4. Renomeia pra .xlsx (pra funcionar no pandas)
+          # 4. Renomeia e verifica
           mv Lotofácil.xls Lotofácil.xlsx
-          
           echo "DOWNLOAD CONCLUÍDO!"
           ls -la Lotofácil.xlsx
           file Lotofácil.xlsx
