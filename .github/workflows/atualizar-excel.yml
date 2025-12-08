@@ -1,4 +1,27 @@
-- name: Baixar Excel da Caixa (encontrando link e usando User-Agent)
+name: Atualizar Excel da Caixa
+
+on:
+  # Roda todo dia às 21:00 UTC (00:00 ou 01:00 no horário de Brasília, dependendo do DSU)
+  schedule:
+    - cron: '0 21 * * *'
+  # Permite rodar manualmente na interface do GitHub
+  workflow_dispatch:
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    # Permissões necessárias para o Action commitar de volta ao repositório
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          # Usa o token padrão do GitHub para permissões de escrita
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Baixar Excel da Caixa (encontrando link e usando User-Agent)
         run: |
           # Define o User-Agent para simular um navegador Chrome
           USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
@@ -25,8 +48,22 @@
           
           # 3. Baixa o arquivo Excel real usando o User-Agent
           echo "Iniciando download do Excel a partir do link dinâmico..."
+          # Salvamos como ZIP, que é o formato comum da Caixa
           curl -A "$USER_AGENT" -L --fail -o Lotofácil.zip "$FULL_URL"
           
           echo "Download concluído!"
           ls -la Lotofácil.zip
           file Lotofácil.zip
+
+      - name: Commit e push
+        run: |
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          # Adiciona o arquivo ZIP baixado
+          git add Lotofácil.zip
+          git commit -m "Atualização automática do Excel - $(date '+%d/%m/%Y às %H:%M')" || echo "Nada pra commitar"
+          git push origin main --force-with-lease
+
+      - name: Trigger Vercel Deploy
+        # Garanta que você configurou SECRETS.VERCEL_DEPLOY_HOOK no seu repositório
+        run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
