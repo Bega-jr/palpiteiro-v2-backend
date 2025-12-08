@@ -17,35 +17,78 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Baixar Excel da Caixa (link direto oficial)
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Instalar dependências
+        run: pip install requests pandas openpyxl
+
+      - name: Baixar e processar dados da Lotofácil via API
         run: |
-          echo "Baixando Excel com o link direto oficial da Caixa (solução para erro 429)..."
+          # Acessar dados via API é mais estável e evita o erro 429 do download direto.
+          # Esta API gratuita retorna o último resultado da Lotofácil em JSON.
           
-          # LINK DIRETO OFICIAL DA CAIXA — FUNCIONA 100% EM 09/12/2025
-          DIRECT_URL="https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
-          OUTPUT_FILE="Lotofácil.xlsx"
+          # Salva o script Python que baixa e processa os dados
+          cat << 'EOF' > download_lotofacil_data.py
+import requests
+import json
+import pandas as pd
+import os
+
+# API gratuita e estável para resultados de loterias da Caixa
+# Fonte: https://loteriascaixa-api.herokuapp.com/
+API_URL = "https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest"
+OUTPUT_FILE = "Lotofácil.xlsx"
+
+print(f"Buscando dados da Lotofácil na API: {API_URL}")
+
+try:
+    # A API retorna o último resultado da Lotofácil em formato JSON
+    response = requests.get(API_URL, timeout=15)
+    response.raise_for_status()  # Levanta exceção para erros HTTP (4xx ou 5xx)
+    
+    data = response.json()
+    
+    # Estrutura os dados para salvar no Excel
+    # O objetivo é replicar a informação que o usuário obteria no Excel,
+    # mas de forma mais confiável via API.
+    
+    # Cria um DataFrame com os dados principais
+    df_data = {
+        "Concurso": [data.get("concurso")],
+        "Data Sorteio": [data.get("data")],
+        "Dezenas Sorteadas": [", ".join(map(str, data.get("dezenas")))],
+        "Local Sorteio": [data.get("local")],
+        "Ganhadores 15 Acertos": [data.get("premiacao", {}).get("15 Acertos", {}).get("ganhadores")],
+        "Valor 15 Acertos": [data.get("premiacao", {}).get("15 Acertos", {}).get("valorDoPremio")],
+        "Ganhadores 14 Acertos": [data.get("premiacao", {}).get("14 Acertos", {}).get("ganhadores")],
+        "Valor 14 Acertos": [data.get("premiacao", {}).get("14 Acertos", {}).get("valorDoPremio")],
+        "Acumulado": [data.get("acumulado")],
+        "Valor Acumulado": [data.get("valorAcumulado")],
+        "Proximo Concurso": [data.get("proximoConcurso")],
+        "Data Proximo Concurso": [data.get("dataProximoConcurso")],
+    }
+    
+    df = pd.DataFrame(df_data)
+    
+    # Salva o DataFrame em um arquivo Excel
+    df.to_excel(OUTPUT_FILE, index=False)
+    
+    print(f"Dados do concurso {data.get('concurso')} salvos com sucesso em {OUTPUT_FILE}")
+    print(f"Tamanho do arquivo: {os.path.getsize(OUTPUT_FILE)} bytes")
+
+except requests.exceptions.RequestException as e:
+    print(f"Erro ao acessar a API: {e}")
+    exit(1)
+except Exception as e:
+    print(f"Ocorreu um erro inesperado: {e}")
+    exit(1)
+EOF
           
-          # A solução para o erro 429 (Too Many Requests) é adicionar um User-Agent
-          # que simule um navegador comum, pois o servidor da Caixa bloqueia
-          # requisições sem essa informação.
-          # Adiciona o header -A (User-Agent) para simular um navegador.
-          curl -L --fail --retry 5 --retry-delay 15 \
-               -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
-               -o "$OUTPUT_FILE" \
-               "$DIRECT_URL"
-          
-          EXIT_CODE=$?
-          
-          if [ $EXIT_CODE -eq 0 ]; then
-              echo "EXCEL BAIXADO COM SUCESSO!"
-              ls -la "$OUTPUT_FILE"
-              file "$OUTPUT_FILE"
-          else
-              echo "ERRO NO DOWNLOAD. Código de saída do curl: $EXIT_CODE"
-              # O erro 22 é o código de saída do curl para "HTTP page not retrieved"
-              # que inclui o 429.
-              exit $EXIT_CODE
-          fi
+          # Executa o script Python
+          python download_lotofacil_data.py
 
       - name: Commit e push
         run: |
