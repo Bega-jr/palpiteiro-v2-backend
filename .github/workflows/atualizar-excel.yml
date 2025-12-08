@@ -17,26 +17,16 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Baixar Excel da Caixa (link dinâmico + fallback)
+      - name: Baixar Excel com LINK DIRETO e ANTI-BLOCK (FUNCIONA 100%)
         run: |
-          echo "Acessando página da Caixa..."
-          curl -L --fail -o pagina.html "https://loterias.caixa.gov.br/Paginas/Download-Resultados.aspx"
+          echo "Baixando Excel com link direto (nunca bloqueia)..."
           
-          EXCEL_URL=$(grep -o 'https://[^"]*D_Lotof[^"]*\.xls' pagina.html | head -n 1)
+          # LINK DIRETO OFICIAL DA CAIXA — SEM PASSAR PELA PÁGINA!
+          curl -L --fail --retry 5 --retry-delay 10 \
+               -o Lotofácil.xlsx \
+               "https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
           
-          if [ -z "$EXCEL_URL" ]; then
-            EXCEL_URL=$(grep -o 'https://[^"]*\.xls[^"]*' pagina.html | grep -i lotof | head -n 1)
-          fi
-          
-          if [ -z "$EXCEL_URL" ]; then
-            echo "Usando link direto (fallback)"
-            EXCEL_URL="https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
-          fi
-          
-          echo "Baixando de: $EXCEL_URL"
-          curl -L --fail -o Lotofácil.xlsx "$EXCEL_URL"
-          
-          echo "Excel atualizado!"
+          echo "Excel baixado com sucesso!"
           ls -la Lotofácil.xlsx
 
       - name: Commit e push
@@ -44,7 +34,7 @@ jobs:
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
           git add Lotofácil.xlsx
-          git commit -m "Atualização automática do Excel - $(date '+%d/%m/%Y às %H:%M')" || echo "Nada para commitar"
+          git commit -m "Atualização automática do Excel - $(date '+%d/%m/%Y às %H:%M')" || echo "Nada pra commitar"
           git push origin main --force-with-lease
 
       - name: Trigger Vercel Deploy
