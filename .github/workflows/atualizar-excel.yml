@@ -1,7 +1,7 @@
 name: Atualizar Excel da Caixa
 
 on:
-  # Roda todo dia às 21:00 UTC (00:00 ou 01:00 no horário de Brasília, dependendo do DSU)
+  # Roda todo dia às 21:00 UTC (00:00 ou 01:00 no horário de Brasília)
   schedule:
     - cron: '0 21 * * *'
   # Permite rodar manualmente na interface do GitHub
@@ -10,7 +10,6 @@ on:
 jobs:
   atualizar:
     runs-on: ubuntu-latest
-    # Permissões necessárias para o Action commitar de volta ao repositório
     permissions:
       contents: write
 
@@ -18,10 +17,9 @@ jobs:
       - name: Checkout do repositório
         uses: actions/checkout@v4
         with:
-          # Usa o token padrão do GitHub para permissões de escrita
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Baixar Excel da Caixa (encontrando link e usando User-Agent)
+      - name: Baixar Excel da Caixa (encontrando link dinâmico)
         run: |
           # Define o User-Agent para simular um navegador Chrome
           USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
@@ -34,16 +32,23 @@ jobs:
           
           echo "Página baixada. Procurando pelo URL do arquivo Excel..."
           
-          # 2. Extrai o URL do Excel (procura por links que contenham 'D_Lotof')
-          EXCEL_URL=$(grep -oP 'href="\K[^"]*D_Lotof[^"]*' pagina_download.html | head -n 1 | tr -d '\r')
+          # 2. **ATUALIZAÇÃO:** Extrai o primeiro URL que termina em .zip ou .xls
+          # Isso é mais resiliente a mudanças de nome de arquivo pela Caixa
+          EXCEL_URL=$(grep -oP 'href="\K[^"]*\.(zip|xls)"' pagina_download.html | head -n 1 | tr -d '\r')
           
           if [ -z "$EXCEL_URL" ]; then
-            echo "Erro: Não foi possível extrair o URL do arquivo Excel da página. A estrutura do site pode ter mudado."
+            echo "Erro: Não foi possível extrair o URL do arquivo Excel/Zip da página. A estrutura do site mudou novamente ou o arquivo não está lá."
             exit 1
           fi
           
           # A URL extraída é relativa, precisamos adicionar o domínio completo da CAIXA
-          FULL_URL="https://loterias.caixa.gov.br$EXCEL_URL"
+          # Verifica se a URL já é completa (começa com /)
+          if [[ "$EXCEL_URL" == /* ]]; then
+            FULL_URL="https://loterias.caixa.gov.br$EXCEL_URL"
+          else
+            FULL_URL="$EXCEL_URL"
+          fi
+
           echo "URL do Excel encontrado: $FULL_URL"
           
           # 3. Baixa o arquivo Excel real usando o User-Agent
