@@ -5,12 +5,13 @@ import os
 import random
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Libera tudo
 
 EXCEL_FILE = "Lotofácil.xlsx"
 
 def carregar():
     if not os.path.exists(EXCEL_FILE):
+        print("Excel não encontrado!")
         return None
     try:
         df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
