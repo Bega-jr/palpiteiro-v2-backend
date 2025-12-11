@@ -1,0 +1,31 @@
+name: Atualizar Excel Lotofácil
+
+on:
+  schedule:
+    - cron: "0 4 * * *" # roda 04:00 UTC todo dia (ajuste)
+  workflow_dispatch:
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Rodar update script
+        run: python update_excel.py
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add Lotofácil.xlsx
+            git commit -m "Atualização automática Lotofácil"
+            git push
+          else
+            echo "Nenhuma alteração"
+          fi
