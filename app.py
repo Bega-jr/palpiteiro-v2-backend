@@ -8,7 +8,7 @@ import random
 
 from estatisticas import obter_estatisticas
 
-app = Flask(**name**)
+app = Flask(__name__)
 CORS(app)
 
 EXCEL_FILE = "Lotofácil.xlsx"
