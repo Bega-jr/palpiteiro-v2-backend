@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: palpiteiro-v2-backend
+    env: docker
+    plan: starter
+    branch: main
+    dockerCommand: ''
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: API_BASE_URL
+        value: https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest
+      - key: EXCEL_FILE
+        value: Lotofácil.xlsx
