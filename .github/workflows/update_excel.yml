@@ -140,19 +140,23 @@ if __name__ == "__main__":
 EOF
 
       - name: Commit e Push (Apenas se houver alterações)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Verifica se o arquivo foi modificado ou criado
-          if [[ -n "$(git status --porcelain Lotofácil.xlsx)" ]]; then
-            git add "Lotofácil.xlsx"
-            # Captura o número do concurso para o log
+          # Adiciona o arquivo para o git rastrear mudanças
+          git add "Lotofácil.xlsx"
+          
+          # Verifica se há algo novo para commitar sem quebrar o script
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração no Excel. Pulando commit."
+          else
+            # Extrai o número do concurso para a mensagem de commit
             CONCURSO=$(python3 -c "import pandas as pd; print(int(pd.read_excel('Lotofácil.xlsx')['Concurso'].max()))")
             git commit -m "Atualização automática Lotofácil - Concurso $CONCURSO"
             git push
-            echo "Excel atualizado e enviado."
-          else
-            echo "Nenhuma alteração detectada."
+            echo "Excel atualizado com sucesso!"
           fi
 
