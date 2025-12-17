@@ -139,6 +139,9 @@ if __name__ == "__main__":
     update_excel()
 EOF
 
+     - name: Executar Script de Atualização
+        run: python3 update_excel.py
+
       - name: Commit e Push (Apenas se houver alterações)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -146,17 +149,20 @@ EOF
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Adiciona o arquivo para o git rastrear mudanças
-          git add "Lotofácil.xlsx"
-          
-          # Verifica se há algo novo para commitar sem quebrar o script
-          if git diff --cached --quiet; then
-            echo "Nenhuma alteração no Excel. Pulando commit."
+          # Verifica se o arquivo existe antes de tentar adicionar
+          if [ -f "Lotofácil.xlsx" ]; then
+            git add "Lotofácil.xlsx"
+            
+            if git diff --cached --quiet; then
+              echo "Nenhuma alteração detectada no Excel."
+            else
+              # Fallback caso o python falhe ao ler o concurso para o commit
+              CONCURSO=$(python3 -c "import pandas as pd; df=pd.read_excel('Lotofácil.xlsx'); print(int(df['Concurso'].max()))" || echo "Novo")
+              git commit -m "Atualização automática Lotofácil - Concurso $CONCURSO"
+              git push
+              echo "Excel atualizado e enviado ao repositório."
+            fi
           else
-            # Extrai o número do concurso para a mensagem de commit
-            CONCURSO=$(python3 -c "import pandas as pd; print(int(pd.read_excel('Lotofácil.xlsx')['Concurso'].max()))")
-            git commit -m "Atualização automática Lotofácil - Concurso $CONCURSO"
-            git push
-            echo "Excel atualizado com sucesso!"
+            echo "Erro: O arquivo Lotofácil.xlsx não foi gerado."
+            exit 1
           fi
-
