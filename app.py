@@ -1,21 +1,27 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 import requests
-import csv
 import os
 from datetime import datetime
 import random
+import pandas as pd
+from io import BytesIO
 import zipfile
-from io import BytesIO, TextIOWrapper
+import csv
+from typing import List, Dict, Any
 
 app = Flask(__name__)
 CORS(app)
 
-CSV_FILE = 'historico_lotofacil.csv'
+# --- CONFIGURAÇÕES ---
+EXCEL_FILE = 'Lotofácil.xlsx'
 CAIXA_DOWNLOAD_URL = "https://servicebus2.caixa.gov.br/portaldeloterias/api/resultados/download?modalidade=Lotof%C3%A1cil"
+CONCURSO_COLUMN = "Concurso"
 
-def atualizar_caixa( ):
-    """Baixa o arquivo ZIP da Caixa, extrai o CSV e salva o histórico."""
+# --- FUNÇÕES DE ATUALIZAÇÃO E CARREGAMENTO ---
+
+def atualizar_excel( ):
+    """Baixa o arquivo ZIP da Caixa, extrai o CSV e salva no Excel."""
     print("Tentando baixar histórico completo da Caixa...")
     try:
         # 1. Baixar o arquivo ZIP
@@ -24,47 +30,30 @@ def atualizar_caixa( ):
         
         # 2. Abrir o ZIP em memória
         with zipfile.ZipFile(BytesIO(response.content)) as z:
-            # O nome do arquivo CSV dentro do ZIP é geralmente "D_LOTOFACIL.CSV"
             csv_name = [name for name in z.namelist() if name.endswith('.CSV') or name.endswith('.csv')][0]
             
-            # 3. Ler o CSV
+            # 3. Ler o CSV com pandas
             with z.open(csv_name) as csv_file:
-                # O CSV da Caixa usa ponto e vírgula (;) como delimitador e codificação Latin-1 (ISO-8859-1)
-                reader = csv.reader(TextIOWrapper(csv_file, 'latin-1'), delimiter=';')
-                linhas = list(reader)
+                # O CSV da Caixa usa ponto e vírgula (;) como delimitador e codificação Latin-1
+                df = pd.read_csv(csv_file, sep=';', encoding='latin-1', header=0)
         
-        # 4. Processar e salvar no formato do projeto (tabulação)
-        if not linhas:
-            print("Erro: Arquivo CSV da Caixa vazio.")
-            return False
-
-        # Colunas relevantes: Concurso (0), Data Sorteio (1), Dezenas (2 a 16)
+        # 4. Limpeza e Seleção de Colunas
+        # Renomear a coluna de concurso para o padrão
+        df.rename(columns={'Concurso': CONCURSO_COLUMN}, inplace=True)
         
-        # Ignora o cabeçalho (primeira linha)
-        dados_processados = []
-        for linha in linhas[1:]:
-            if len(linha) >= 17:
-                try:
-                    concurso = int(linha[0])
-                    data = linha[1]
-                    # As dezenas estão nas colunas 2 a 16 (índices 2 a 16)
-                    numeros = [int(n) for n in linha[2:17]]
-                    
-                    # Formato de saída: [concurso, data, n1, n2, ..., n15]
-                    dados_processados.append([concurso, data] + numeros)
-                except ValueError:
-                    # Ignora linhas com dados inválidos
-                    continue
+        # Selecionar apenas as colunas necessárias para o palpiteiro
+        colunas_dezenas = [f'Bola{i}' for i in range(1, 16)]
+        colunas_selecionadas = [CONCURSO_COLUMN, 'Data Sorteio'] + colunas_dezenas
+        
+        df_final = df[colunas_selecionadas].copy()
+        
+        # Renomear as colunas de dezenas para n1, n2, etc. (Opcional, mas ajuda)
+        df_final.columns = [CONCURSO_COLUMN, 'Data Sorteio'] + [f'n{i}' for i in range(1, 16)]
+        
+        # 5. Salvar no Excel
+        df_final.to_excel(EXCEL_FILE, index=False)
 
-        # 5. Salvar no CSV do projeto (usando tabulação)
-        with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f, delimiter='\t')
-            # Escreve o cabeçalho do projeto
-            writer.writerow(['concurso', 'data'] + [f'n{i}' for i in range(1,16)])
-            # Escreve os dados
-            writer.writerows(dados_processados)
-
-        print(f"Histórico completo da Caixa salvo com sucesso! Total de {len(dados_processados)} concursos.")
+        print(f"Histórico completo da Caixa salvo com sucesso em {EXCEL_FILE}!")
         return True
 
     except requests.exceptions.RequestException as e:
@@ -74,34 +63,38 @@ def atualizar_caixa( ):
         print(f"Erro inesperado ao processar o arquivo da Caixa: {e}")
         return False
 
-def carregar_historico():
-    if not os.path.exists(CSV_FILE):
+def carregar_historico() -> List[Dict[str, Any]]:
+    """Carrega o histórico do Excel e retorna uma lista de dicionários."""
+    if not os.path.exists(EXCEL_FILE):
+        # Tenta atualizar se o arquivo não existir
+        if atualizar_excel():
+            return carregar_historico()
         return []
     
-    historico = []
-    with open(CSV_FILE, 'r', encoding='utf-8') as f:
-        reader = csv.reader(f, delimiter='\t')
-        linhas = list(reader)
+    try:
+        df = pd.read_excel(EXCEL_FILE)
         
-        # Pula cabeçalho se existir
-        start = 1 if linhas and not linhas[0][0].isdigit() else 0
+        # Garante que as colunas de dezenas são tratadas como números
+        colunas_dezenas = [f'n{i}' for i in range(1, 16)]
+        for col in colunas_dezenas:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
         
-        for linha in linhas[start:]:
-            if len(linha) >= 17:
-                try:
-                    concurso = int(linha[0])
-                    data = linha[1]
-                    # Números estão nas colunas 2 a 16 (índices 2 a 16)
-                    numeros = [int(n) for n in linha[2:17]]
-                    historico.append({
-                        'concurso': concurso,
-                        'data': data,
-                        'numeros': numeros
-                    })
-                except ValueError:
-                    continue
-    
-    return sorted(historico, key=lambda x: x['concurso'])
+        historico = []
+        for index, row in df.iterrows():
+            numeros = [row[f'n{i}'] for i in range(1, 16) if pd.notna(row[f'n{i}'])]
+            historico.append({
+                'concurso': row[CONCURSO_COLUMN],
+                'data': row['Data Sorteio'],
+                'numeros': sorted([int(n) for n in numeros])
+            })
+        
+        return historico
+    except Exception as e:
+        print(f"Erro ao carregar o Excel: {e}")
+        return []
+
+# --- FUNÇÕES DE ESTATÍSTICAS E PALPITES ---
 
 def estatisticas():
     historico = carregar_historico()
@@ -113,17 +106,20 @@ def estatisticas():
             "quentes": [],
             "frios": [],
             "total_sorteios": 0,
-            "erro": "Histórico de sorteios está vazio ou não pôde ser carregado. Tente atualizar manualmente a rota /api/atualizar."
+            "erro": "Histórico de sorteios está vazio ou não pôde ser carregado."
         }
 
     todos_numeros = [n for jogo in historico for n in jogo['numeros']]
     contagem = {n: todos_numeros.count(n) for n in range(1, 26)}
+    
+    # 10 números mais sorteados (quentes)
     quentes = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:10]
+    # 10 números menos sorteados (frios)
     frios = sorted(contagem.items(), key=lambda x: x[1])[:10]
 
     ultimo = historico[-1]
     return {
-        "ultimo_concurso": ultimo['concurso'],
+        "ultimo_concurso": int(ultimo['concurso']),
         "data_ultimo": ultimo['data'],
         "ultimos_numeros": ultimo['numeros'],
         "quentes": [n for n, c in quentes],
@@ -132,40 +128,35 @@ def estatisticas():
     }
 
 def gerar_apostas():
-    historico = carregar_historico()
-    if len(historico) < 10:
-        # Gera aleatório se histórico pequeno
-        apostas = []
-        for _ in range(7):
-            aposta = sorted(random.sample(range(1, 26), 15))
-            apostas.append(aposta)
-        return {
-            "gerado_em": datetime.now().strftime('%Y-%m-%d %H:%M'),
-            "fixos": [],
-            "apostas": apostas
-        }
+    stats = estatisticas()
+    
+    if stats.get("erro"):
+        return {"erro": stats["erro"]}
 
-    # Fixos dos últimos 50
-    ultimos_50 = historico[-50:]
-    contagem = {}
-    for jogo in ultimos_50:
-        for n in jogo['numeros']:
-            contagem[n] = contagem.get(n, 0) + 1
-    fixos = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:4]
-    fixos_nums = [n for n, c in fixos]
-
-    def criar_aposta(base=[]):
+    # 1. Definir os fixos (4 números mais quentes)
+    fixos_nums = stats['quentes'][:4]
+    
+    # 2. Gerar 7 apostas
+    apostas = []
+    
+    # Função auxiliar para criar uma aposta completa
+    def criar_aposta(base: List[int]) -> List[int]:
         aposta = base[:]
-        candidatos = [n for n in range(1,26) if n not in aposta]
+        candidatos = [n for n in range(1, 26) if n not in aposta]
+        
+        # Prioriza números que não estão nos fixos para completar
+        random.shuffle(candidatos)
+        
         while len(aposta) < 15:
-            escolhido = random.choice(candidatos)
-            aposta.append(escolhido)
-            candidatos.remove(escolhido)
+            aposta.append(candidatos.pop())
+        
         return sorted(aposta)
 
-    apostas = []
+    # 5 apostas com os fixos
     for _ in range(5):
         apostas.append(criar_aposta(fixos_nums))
+        
+    # 2 apostas aleatórias (sem fixos)
     for _ in range(2):
         apostas.append(criar_aposta([]))
 
@@ -175,29 +166,33 @@ def gerar_apostas():
         "apostas": apostas
     }
 
+# --- ROTAS DA API ---
+
 @app.route('/api/atualizar', methods=['GET'])
 def atualizar():
-    sucesso = atualizar_caixa()
+    sucesso = atualizar_excel()
     return jsonify({"atualizado": sucesso, "fonte": "Caixa Econômica Federal - Histórico Completo"})
 
 @app.route('/api/palpites', methods=['GET'])
 def palpites():
     # Garante que o histórico está carregado (ou tenta atualizar) antes de gerar palpites
-    if not os.path.exists(CSV_FILE):
-        atualizar_caixa()
+    if not os.path.exists(EXCEL_FILE):
+        atualizar_excel()
     return jsonify(gerar_apostas())
 
 @app.route('/api/resultados', methods=['GET'])
 def resultados():
     # Garante que o histórico está carregado (ou tenta atualizar) antes de gerar estatísticas
-    if not os.path.exists(CSV_FILE):
-        atualizar_caixa()
+    if not os.path.exists(EXCEL_FILE):
+        atualizar_excel()
     return jsonify(estatisticas())
 
 @app.route('/')
 def home():
-    return jsonify({"status": "Palpiteiro V2 Backend - Caixa Download", "online": True})
+    return jsonify({"status": "Palpiteiro V2 Backend - Excel/Pandas", "online": True})
 
 if __name__ == '__main__':
+    # Tenta atualizar o Excel na inicialização
+    atualizar_excel()
     app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000))
 
