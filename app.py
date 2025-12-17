@@ -1,197 +1,203 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-import pandas as pd
+import requests
+import csv
 import os
+from datetime import datetime
 import random
-
-# Módulos intermediários
-
-from estatisticas import obter_estatisticas
+import zipfile
+from io import BytesIO, TextIOWrapper
 
 app = Flask(__name__)
 CORS(app)
 
-EXCEL_FILE = "Lotofácil.xlsx"
+CSV_FILE = 'historico_lotofacil.csv'
+CAIXA_DOWNLOAD_URL = "https://servicebus2.caixa.gov.br/portaldeloterias/api/resultados/download?modalidade=Lotof%C3%A1cil"
 
-# ---------------------------------------------------------------------------
+def atualizar_caixa( ):
+    """Baixa o arquivo ZIP da Caixa, extrai o CSV e salva o histórico."""
+    print("Tentando baixar histórico completo da Caixa...")
+    try:
+        # 1. Baixar o arquivo ZIP
+        response = requests.get(CAIXA_DOWNLOAD_URL, timeout=30)
+        response.raise_for_status()
+        
+        # 2. Abrir o ZIP em memória
+        with zipfile.ZipFile(BytesIO(response.content)) as z:
+            # O nome do arquivo CSV dentro do ZIP é geralmente "D_LOTOFACIL.CSV"
+            csv_name = [name for name in z.namelist() if name.endswith('.CSV') or name.endswith('.csv')][0]
+            
+            # 3. Ler o CSV
+            with z.open(csv_name) as csv_file:
+                # O CSV da Caixa usa ponto e vírgula (;) como delimitador e codificação Latin-1 (ISO-8859-1)
+                reader = csv.reader(TextIOWrapper(csv_file, 'latin-1'), delimiter=';')
+                linhas = list(reader)
+        
+        # 4. Processar e salvar no formato do projeto (tabulação)
+        if not linhas:
+            print("Erro: Arquivo CSV da Caixa vazio.")
+            return False
 
-# FUNÇÃO PARA CARREGAR O EXCEL (FALLBACK PRINCIPAL)
+        # Colunas relevantes: Concurso (0), Data Sorteio (1), Dezenas (2 a 16)
+        
+        # Ignora o cabeçalho (primeira linha)
+        dados_processados = []
+        for linha in linhas[1:]:
+            if len(linha) >= 17:
+                try:
+                    concurso = int(linha[0])
+                    data = linha[1]
+                    # As dezenas estão nas colunas 2 a 16 (índices 2 a 16)
+                    numeros = [int(n) for n in linha[2:17]]
+                    
+                    # Formato de saída: [concurso, data, n1, n2, ..., n15]
+                    dados_processados.append([concurso, data] + numeros)
+                except ValueError:
+                    # Ignora linhas com dados inválidos
+                    continue
 
-# ---------------------------------------------------------------------------
+        # 5. Salvar no CSV do projeto (usando tabulação)
+        with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f, delimiter='\t')
+            # Escreve o cabeçalho do projeto
+            writer.writerow(['concurso', 'data'] + [f'n{i}' for i in range(1,16)])
+            # Escreve os dados
+            writer.writerows(dados_processados)
 
-def carregar():
-if not os.path.exists(EXCEL_FILE):
-print("Excel não encontrado!")
-return None
+        print(f"Histórico completo da Caixa salvo com sucesso! Total de {len(dados_processados)} concursos.")
+        return True
 
-```
-try:
-    df = pd.read_excel(EXCEL_FILE, engine='openpyxl')
-    dados = []
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao acessar a URL da Caixa: {e}")
+        return False
+    except Exception as e:
+        print(f"Erro inesperado ao processar o arquivo da Caixa: {e}")
+        return False
 
-    for _, row in df.iterrows():
-        try:
-            numeros = [int(row[f'Bola{i}']) for i in range(1, 16)]
-            dados.append({
-                'concurso': int(row['Concurso']),
-                'data': str(row['Data Sorteio']).split(' ')[0],
-                'numeros': sorted(numeros),
+def carregar_historico():
+    if not os.path.exists(CSV_FILE):
+        return []
+    
+    historico = []
+    with open(CSV_FILE, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f, delimiter='\t')
+        linhas = list(reader)
+        
+        # Pula cabeçalho se existir
+        start = 1 if linhas and not linhas[0][0].isdigit() else 0
+        
+        for linha in linhas[start:]:
+            if len(linha) >= 17:
+                try:
+                    concurso = int(linha[0])
+                    data = linha[1]
+                    # Números estão nas colunas 2 a 16 (índices 2 a 16)
+                    numeros = [int(n) for n in linha[2:17]]
+                    historico.append({
+                        'concurso': concurso,
+                        'data': data,
+                        'numeros': numeros
+                    })
+                except ValueError:
+                    continue
+    
+    return sorted(historico, key=lambda x: x['concurso'])
 
-                'ganhadores_15': int(row.get('Ganhadores 15 acertos', 0)),
-                'premio_15': str(row.get('Rateio 15 acertos', 'R$0,00')),
-
-                'ganhadores_14': int(row.get('Ganhadores 14 acertos', 0)),
-                'premio_14': str(row.get('Rateio 14 acertos', 'R$0,00')),
-
-                'ganhadores_13': int(row.get('Ganhadores 13 acertos', 0)),
-                'premio_13': str(row.get('Rateio 13 acertos', 'R$0,00')),
-
-                'ganhadores_12': int(row.get('Ganhadores 12 acertos', 0)),
-                'premio_12': str(row.get('Rateio 12 acertos', 'R$0,00')),
-
-                'ganhadores_11': int(row.get('Ganhadores 11 acertos', 0)),
-                'premio_11': str(row.get('Rateio 11 acertos', 'R$0,00')),
-            })
-        except:
-            continue
-
-    return sorted(dados, key=lambda x: x['concurso'], reverse=True)
-
-except Exception as e:
-    print("Erro ao carregar excel:", e)
-    return None
-```
-
-# ---------------------------------------------------------------------------
-
-# ROTA - ÚLTIMO RESULTADO
-
-# ---------------------------------------------------------------------------
-
-@app.route('/api/resultados')
-def resultados():
-dados = carregar()
-if not dados:
-return jsonify({"erro": "Excel não encontrado"}), 500
-
-```
-ultimo = dados[0]
-
-faixas = [
-    {"faixa": "15 acertos", "ganhadores": ultimo['ganhadores_15'], "premio": ultimo['premio_15']},
-    {"faixa": "14 acertos", "ganhadores": ultimo['ganhadores_14'], "premio": ultimo['premio_14']},
-    {"faixa": "13 acertos", "ganhadores": ultimo['ganhadores_13'], "premio": ultimo['premio_13']},
-    {"faixa": "12 acertos", "ganhadores": ultimo['ganhadores_12'], "premio": ultimo['premio_12']},
-    {"faixa": "11 acertos", "ganhadores": ultimo['ganhadores_11'], "premio": ultimo['premio_11']},
-]
-
-return jsonify({
-    "ultimo_concurso": ultimo['concurso'],
-    "data_ultimo": ultimo['data'],
-    "ultimos_numeros": ultimo['numeros'],
-    "ganhadores": faixas
-})
-```
-
-# ---------------------------------------------------------------------------
-
-# ROTA - ESTATÍSTICAS
-
-# ---------------------------------------------------------------------------
-
-@app.route('/api/estatisticas')
 def estatisticas():
-dados = carregar()
-if not dados:
-return jsonify({"erro": "Sem dados"}), 503
+    historico = carregar_historico()
+    if not historico:
+        return {
+            "ultimo_concurso": 0,
+            "data_ultimo": "N/A",
+            "ultimos_numeros": [],
+            "quentes": [],
+            "frios": [],
+            "total_sorteios": 0,
+            "erro": "Histórico de sorteios está vazio ou não pôde ser carregado. Tente atualizar manualmente a rota /api/atualizar."
+        }
 
-```
-# últimos 50 concursos
-ultimos_50 = dados[:50]
-contagem = {}
+    todos_numeros = [n for jogo in historico for n in jogo['numeros']]
+    contagem = {n: todos_numeros.count(n) for n in range(1, 26)}
+    quentes = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:10]
+    frios = sorted(contagem.items(), key=lambda x: x[1])[:10]
 
-for jogo in ultimos_50:
-    for n in jogo['numeros']:
-        contagem[n] = contagem.get(n, 0) + 1
+    ultimo = historico[-1]
+    return {
+        "ultimo_concurso": ultimo['concurso'],
+        "data_ultimo": ultimo['data'],
+        "ultimos_numeros": ultimo['numeros'],
+        "quentes": [n for n, c in quentes],
+        "frios": [n for n, c in frios],
+        "total_sorteios": len(historico)
+    }
 
-mais = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:10]
-menos = sorted(contagem.items(), key=lambda x: x[1])[:10]
+def gerar_apostas():
+    historico = carregar_historico()
+    if len(historico) < 10:
+        # Gera aleatório se histórico pequeno
+        apostas = []
+        for _ in range(7):
+            aposta = sorted(random.sample(range(1, 26), 15))
+            apostas.append(aposta)
+        return {
+            "gerado_em": datetime.now().strftime('%Y-%m-%d %H:%M'),
+            "fixos": [],
+            "apostas": apostas
+        }
 
-# atrasados
-todos = set(range(1, 26))
-recentes = set()
+    # Fixos dos últimos 50
+    ultimos_50 = historico[-50:]
+    contagem = {}
+    for jogo in ultimos_50:
+        for n in jogo['numeros']:
+            contagem[n] = contagem.get(n, 0) + 1
+    fixos = sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:4]
+    fixos_nums = [n for n, c in fixos]
 
-for j in dados[:20]:
-    recentes.update(j['numeros'])
+    def criar_aposta(base=[]):
+        aposta = base[:]
+        candidatos = [n for n in range(1,26) if n not in aposta]
+        while len(aposta) < 15:
+            escolhido = random.choice(candidatos)
+            aposta.append(escolhido)
+            candidatos.remove(escolhido)
+        return sorted(aposta)
 
-atrasados = sorted(todos - recentes)
+    apostas = []
+    for _ in range(5):
+        apostas.append(criar_aposta(fixos_nums))
+    for _ in range(2):
+        apostas.append(criar_aposta([]))
 
-return jsonify({
-    "maisSorteados": [{"numero": n, "vezes": c} for n, c in mais],
-    "menosSorteados": [{"numero": n, "vezes": c} for n, c in menos],
-    "atrasados": atrasados
-})
-```
+    return {
+        "gerado_em": datetime.now().strftime('%Y-%m-%d %H:%M'),
+        "fixos": fixos_nums,
+        "apostas": apostas
+    }
 
-# ---------------------------------------------------------------------------
-
-# ROTA - PALPITES VIP
-
-# ---------------------------------------------------------------------------
-
-@app.route('/api/palpites-vip')
-def palpites_vip():
-dados = carregar()
-if not dados:
-return jsonify({"erro": "Sem dados"}), 503
-
-```
-ultimos = dados[:50]
-contagem = {}
-
-for j in ultimos:
-    for n in j['numeros']:
-        contagem[n] = contagem.get(n, 0) + 1
-
-quentes = [n for n, c in sorted(contagem.items(), key=lambda x: x[1], reverse=True)[:8]]
-
-def gerar():
-    aposta = quentes[:random.randint(5, 7)]
-    while len(aposta) < 15:
-        n = random.randint(1, 25)
-        if n not in aposta:
-            aposta.append(n)
-    return sorted(aposta)
-
-return jsonify({
-    "quentes": quentes,
-    "apostas": [gerar() for _ in range(7)]
-})
-```
-
-# ---------------------------------------------------------------------------
-
-# ROTA - ATUALIZAR (USA API + FALLBACK EXCEL)
-
-# ---------------------------------------------------------------------------
-
-@app.route('/api/atualizar')
+@app.route('/api/atualizar', methods=['GET'])
 def atualizar():
-resultado = obter_estatisticas()
-return jsonify(resultado)
+    sucesso = atualizar_caixa()
+    return jsonify({"atualizado": sucesso, "fonte": "Caixa Econômica Federal - Histórico Completo"})
 
-# ---------------------------------------------------------------------------
+@app.route('/api/palpites', methods=['GET'])
+def palpites():
+    # Garante que o histórico está carregado (ou tenta atualizar) antes de gerar palpites
+    if not os.path.exists(CSV_FILE):
+        atualizar_caixa()
+    return jsonify(gerar_apostas())
 
-# ROTA - STATUS
-
-# ---------------------------------------------------------------------------
+@app.route('/api/resultados', methods=['GET'])
+def resultados():
+    # Garante que o histórico está carregado (ou tenta atualizar) antes de gerar estatísticas
+    if not os.path.exists(CSV_FILE):
+        atualizar_caixa()
+    return jsonify(estatisticas())
 
 @app.route('/')
 def home():
-return jsonify({
-"status": "Palpiteiro V2 - Online",
-"excel_ok": os.path.exists(EXCEL_FILE)
-})
+    return jsonify({"status": "Palpiteiro V2 Backend - Caixa Download", "online": True})
 
-if **name** == '**main**':
-app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=os.environ.get('PORT', 5000))
+
