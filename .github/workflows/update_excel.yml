@@ -139,21 +139,20 @@ if __name__ == "__main__":
     update_excel()
 EOF
 
-      - name: Executar Script de Atualização
-        run: python update_excel.py
-
       - name: Commit e Push (Apenas se houver alterações)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Verifica se o arquivo Lotofácil.xlsx foi alterado
-          if git diff --exit-code Lotofácil.xlsx; then
-            echo "Nenhuma alteração no Excel. Pulando commit."
-          else
-            git add Lotofácil.xlsx
-            git commit -m "Atualização automática Lotofácil - Concurso $(python -c "import pandas as pd; print(pd.read_excel('Lotofácil.xlsx')['Concurso'].max())")"
+          # Verifica se o arquivo foi modificado ou criado
+          if [[ -n "$(git status --porcelain Lotofácil.xlsx)" ]]; then
+            git add "Lotofácil.xlsx"
+            # Captura o número do concurso para o log
+            CONCURSO=$(python3 -c "import pandas as pd; print(int(pd.read_excel('Lotofácil.xlsx')['Concurso'].max()))")
+            git commit -m "Atualização automática Lotofácil - Concurso $CONCURSO"
             git push
-            echo "Excel atualizado e commitado com sucesso."
+            echo "Excel atualizado e enviado."
+          else
+            echo "Nenhuma alteração detectada."
           fi
 
