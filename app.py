@@ -3,10 +3,11 @@ from flask_cors import CORS
 import pandas as pd
 import os
 import random
-from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)  # Libera pro frontend acessar
+
+# ESSA LINHA LIBERA TUDO (Netlify, localhost, qualquer origem)
+CORS(app, resources={r"/api/*": {"origins": "*"}})  # Libera pro frontend acessar
 
 EXCEL_FILE = "Lotofácil.xlsx"  # Arquivo na raiz do repositório
 
