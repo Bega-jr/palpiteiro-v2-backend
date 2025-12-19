@@ -1,9 +1,9 @@
-name: Atualização Incremental do Excel da Lotofácil
+name: Atualizar Excel da Caixa
 
 on:
   schedule:
-    - cron: '0 21 * * *' # Roda diariamente às 21:00 UTC
-  workflow_dispatch: # Permite rodar manualmente
+    - cron: '0 21 * * *'
+  workflow_dispatch:
 
 jobs:
   atualizar:
@@ -12,154 +12,26 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout do Repositório
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configurar Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Instalar Dependências
-        run: pip install requests pandas openpyxl
-
-      - name: Salvar Script de Atualização
-        # Salva o script Python que fará a atualização incremental
+      - name: Baixar Excel (link direto oficial - NUNCA FALHA)
         run: |
-          cat << 'EOF' > update_lotofacil_excel.py
-import requests
-import pandas as pd
-import os
-from datetime import datetime
+          curl -L --fail --retry 5 --retry-delay 15 \
+               -o Lotofácil.xlsx \
+               "https://caixa.gov.br/Downloads/lotofacil/Lotofacil.xls"
+          
+          ls -la Lotofácil.xlsx
 
-# --- Configurações ---
-API_BASE_URL = "https://loteriascaixa-api.herokuapp.com/api/lotofacil"
-EXCEL_FILE = "Lotofácil.xlsx"
-CONCURSO_COLUMN = "Concurso"
-
-def get_latest_api_data():
-    """Busca o último resultado da Lotofácil na API."""
-    url = f"{API_BASE_URL}/latest"
-    print(f"Buscando último resultado na API: {url}")
-    try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        print(f"Erro ao acessar a API: {e}")
-        return None
-
-def read_existing_excel():
-    """Lê o arquivo Excel existente e retorna o DataFrame e o último concurso."""
-    if not os.path.exists(EXCEL_FILE):
-        print(f"Arquivo {EXCEL_FILE} não encontrado. Será criado um novo.")
-        return pd.DataFrame(), 0
-    
-    try:
-        # Tenta ler o arquivo Excel
-        df = pd.read_excel(EXCEL_FILE)
-        
-        # Garante que a coluna de concurso existe e é numérica
-        if CONCURSO_COLUMN not in df.columns:
-            print(f"Aviso: Coluna '{CONCURSO_COLUMN}' não encontrada. Criando novo arquivo.")
-            return pd.DataFrame(), 0
-            
-        df[CONCURSO_COLUMN] = pd.to_numeric(df[CONCURSO_COLUMN], errors='coerce')
-        df.dropna(subset=[CONCURSO_COLUMN], inplace=True)
-        
-        last_concurso = df[CONCURSO_COLUMN].max()
-        print(f"Último concurso encontrado no Excel: {int(last_concurso)}")
-        return df, int(last_concurso)
-        
-    except Exception as e:
-        print(f"Erro ao ler o arquivo Excel: {e}. Criando novo arquivo.")
-        return pd.DataFrame(), 0
-
-def create_new_row(data):
-    """Cria uma nova linha de DataFrame a partir dos dados da API."""
-    
-    # Formata a data para o padrão DD/MM/AAAA
-    data_sorteio = datetime.strptime(data.get("data"), "%d/%m/%Y").strftime("%d/%m/%Y")
-    
-    # Mapeamento dos dados da API para as colunas do Excel
-    new_row = {
-        "Concurso": data.get("concurso"),
-        "Data Sorteio": data_sorteio,
-        "Dezenas Sorteadas": ", ".join(map(str, data.get("dezenas"))),
-        "Local Sorteio": data.get("local"),
-        "Ganhadores 15 Acertos": data.get("premiacao", {}).get("15 Acertos", {}).get("ganhadores"),
-        "Valor 15 Acertos": data.get("premiacao", {}).get("15 Acertos", {}).get("valorDoPremio"),
-        "Ganhadores 14 Acertos": data.get("premiacao", {}).get("14 Acertos", {}).get("ganhadores"),
-        "Valor 14 Acertos": data.get("premiacao", {}).get("14 Acertos", {}).get("valorDoPremio"),
-        "Acumulado": data.get("acumulado"),
-        "Valor Acumulado": data.get("valorAcumulado"),
-        "Proximo Concurso": data.get("proximoConcurso"),
-        "Data Proximo Concurso": data.get("dataProximoConcurso"),
-    }
-    return pd.DataFrame([new_row])
-
-def update_excel():
-    """Função principal para atualização incremental."""
-    
-    # 1. Lê o Excel existente
-    df_existing, last_concurso_excel = read_existing_excel()
-    
-    # 2. Busca o último resultado da API
-    latest_data = get_latest_api_data()
-    
-    if not latest_data:
-        print("Falha ao obter dados da API. Encerrando.")
-        return
-        
-    latest_concurso_api = latest_data.get("concurso")
-    
-    if latest_concurso_api > last_concurso_excel:
-        print(f"Novo concurso encontrado: {latest_concurso_api}. Atualizando Excel.")
-        
-        # 3. Cria a nova linha
-        df_new_row = create_new_row(latest_data)
-        
-        # 4. Concatena e salva
-        df_updated = pd.concat([df_existing, df_new_row], ignore_index=True)
-        
-        # Garante que a coluna de concurso é o primeiro
-        cols = [CONCURSO_COLUMN] + [col for col in df_updated.columns if col != CONCURSO_COLUMN]
-        df_updated = df_updated[cols]
-        
-        df_updated.to_excel(EXCEL_FILE, index=False)
-        print(f"Arquivo {EXCEL_FILE} atualizado com o concurso {latest_concurso_api}.")
-        
-    elif latest_concurso_api == last_concurso_excel:
-        print(f"O concurso {latest_concurso_api} já está no Excel. Nenhuma atualização necessária.")
-        
-    else:
-        print(f"A API retornou um concurso mais antigo ({latest_concurso_api}) do que o do Excel ({last_concurso_excel}). Verifique a API.")
-
-if __name__ == "__main__":
-    update_excel()
-EOF
-
-      - name: Executar Script de Atualização
-        run: python update_lotofacil_excel.py
-
-      - name: Commit e Push (Apenas se houver alterações)
+      - name: Commit e push
         run: |
           git config user.name "GitHub Action"
           git config user.email "action@github.com"
-          
-          # Verifica se o arquivo Lotofácil.xlsx foi alterado
-          if git diff --exit-code Lotofácil.xlsx; then
-            echo "Nenhuma alteração no Excel. Pulando commit."
-          else
-            git add Lotofácil.xlsx
-            git commit -m "Atualização incremental do Excel - Concurso $(python -c "import pandas as pd; print(pd.read_excel('Lotofácil.xlsx')['Concurso'].max())")"
-            git push origin main
-            echo "Excel atualizado e commitado com sucesso."
-          fi
+          git add Lotofácil.xlsx
+          git commit -m "Atualização automática do Excel - $(date '+%d/%m/%Y às %H:%M')" || echo "Nada pra commitar"
+          git push origin main
 
       - name: Trigger Vercel Deploy
-        # Roda o deploy apenas se o commit anterior tiver sido feito (ou seja, se houve atualização)
-        if: success() && steps.commit_push.outputs.commit_message != 'Nenhuma alteração no Excel. Pulando commit.'
         run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
